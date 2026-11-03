@@ -1,0 +1,208 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
+
+/* Base Styles */
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+    background-color: #08090a;
+    color: #e4e7eb;
+}
+
+/* Header */
+.veritas-header {
+    border-bottom: 1px solid #1a1e23;
+    padding: 1.5rem 0 1rem 0;
+    margin-bottom: 1.5rem;
+}
+.veritas-wordmark {
+    font-family: 'Cinzel', serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #ffffff;
+    text-transform: uppercase;
+}
+.veritas-subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: #6c7886;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-top: 0.3rem;
+}
+
+/* Verdict Badges */
+.verdict-badge-lg {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.6rem 1.4rem;
+    border-radius: 4px;
+    margin: 0.6rem 0;
+}
+.badge-supported {
+    background: #092615;
+    color: #38d37a;
+    border: 1px solid #1c7c44;
+}
+.badge-refuted {
+    background: #2a0c0c;
+    color: #f87171;
+    border: 1px solid #991b1b;
+}
+.badge-nei {
+    background: #261f07;
+    color: #fbbf24;
+    border: 1px solid #92400e;
+}
+
+/* Metric / Confidence Bar */
+.conf-container {
+    background: #111418;
+    border: 1px solid #1f242c;
+    border-radius: 4px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 1.2rem;
+}
+.conf-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-top: 0.4rem;
+}
+.conf-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: #1e242d;
+    border-radius: 3px;
+    overflow: hidden;
+}
+.conf-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s ease-in-out;
+}
+.conf-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #cbd5e1;
+    min-width: 48px;
+    text-align: right;
+}
+
+/* Cards */
+.card-section {
+    background: #0d1013;
+    border: 1px solid #1a2027;
+    border-radius: 6px;
+    padding: 1.2rem;
+    margin-bottom: 1.2rem;
+}
+.section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #718096;
+    margin-bottom: 0.8rem;
+    border-bottom: 1px solid #1a2027;
+    padding-bottom: 0.4rem;
+}
+
+/* Evidence Card */
+.evidence-card {
+    background: #111419;
+    border-left: 3px solid #3b82f6;
+    border-radius: 0 4px 4px 0;
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 0.8rem;
+    border-top: 1px solid #1c222b;
+    border-right: 1px solid #1c222b;
+    border-bottom: 1px solid #1c222b;
+}
+.evidence-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #60a5fa;
+}
+.evidence-title {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #f1f5f9;
+    margin: 0.2rem 0;
+}
+.evidence-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: #64748b;
+    margin-bottom: 0.4rem;
+}
+.evidence-snippet {
+    font-size: 0.84rem;
+    color: #94a3b8;
+    line-height: 1.5;
+}
+
+/* Debate Turn */
+.turn-box {
+    padding: 0.8rem 1rem;
+    margin-bottom: 0.6rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+.turn-advocate {
+    background: #091a10;
+    border-left: 3px solid #16a34a;
+    color: #a7f3d0;
+}
+.turn-skeptic {
+    background: #1c0a0a;
+    border-left: 3px solid #dc2626;
+    color: #fecaca;
+}
+.turn-neutral {
+    background: #0c1626;
+    border-left: 3px solid #2563eb;
+    color: #bfdbfe;
+}
+.turn-critic {
+    background: #180c26;
+    border-left: 3px solid #9333ea;
+    color: #e9d5ff;
+}
+.turn-judge {
+    background: #1c1808;
+    border-left: 3px solid #d97706;
+    color: #fde68a;
+}
+.turn-agent-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+}
+
+/* Audit Trail Stream */
+.audit-terminal {
+    background: #050607;
+    border: 1px solid #171b21;
+    border-radius: 4px;
+    padding: 0.9rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: #6ee7b7;
+    max-height: 280px;
+    overflow-y: auto;
+    line-height: 1.7;
+}
+
+/* Hide Streamlit default decor */
+#MainMenu, footer, header { visibility: hidden; }
+.block-container { padding-top: 1rem !important; }

@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  veritas-api:
+    build: .
+    container_name: veritas-api
+    ports:
+      - "8000:8000"
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  veritas-ui:
+    build: .
+    container_name: veritas-ui
+    ports:
+      - "8501:8501"
+    command: streamlit run ui/app.py --server.port 8501 --server.address 0.0.0.0
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      - veritas-api
+    restart: unless-stopped
