@@ -22,6 +22,34 @@ def evidence_retriever_node(state: VeritasState) -> Dict[str, Any]:
         }
 
     claim_id = current_claim.claim_id
+
+    # If gold / provided evidence is supplied, skip web retrieval
+    provided = state.get("provided_evidence", [])
+    if provided:
+        indexed_items: List[EvidenceItem] = []
+        for item in provided:
+            indexed = evidence_pool.add_item(
+                claim_id=claim_id,
+                task_id=item.task_id or "T_provided",
+                title=item.title,
+                url=item.url,
+                snippet=item.snippet,
+                source_domain=item.source_domain,
+                supports_claim=item.supports_claim,
+                relevance_score=item.relevance_score,
+            )
+            indexed_items.append(indexed)
+
+        log_msg = format_audit_log(
+            "Evidence Retriever",
+            f"Using {len(indexed_items)} provided gold evidence item(s) for claim {claim_id} (skipped external retrieval)."
+        )
+        return {
+            "evidence_pool": indexed_items,
+            "audit_trail": [log_msg],
+            "error": None,
+        }
+
     tasks: List[ResearchTask] = state.get("research_plan", [])
 
     if not tasks:

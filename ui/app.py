@@ -36,9 +36,13 @@ with st.sidebar:
     st.markdown("### Verification Settings")
     pipeline_mode = st.radio(
         "Architecture Mode",
-        options=["veritas", "baseline"],
-        format_func=lambda x: "VERITAS Mode (10-Agent Consensus)" if x == "veritas" else "Baseline Mode (ClaimAuditor 5-Agent)",
-        help="Switch between the full autonomous multi-agent consensus system and the legacy baseline for empirical comparison.",
+        options=["veritas", "fcmad", "baseline"],
+        format_func=lambda x: (
+            "VERITAS Mode (10-Agent Consensus)" if x == "veritas"
+            else ("FC-MAD Mode (DeGroot TV-Consensus)" if x == "fcmad"
+            else "Baseline Mode (ClaimAuditor 5-Agent)")
+        ),
+        help="Switch between VERITAS consensus, FC-MAD DeGroot consensus, and the legacy baseline for empirical comparison.",
     )
 
     max_rounds = st.slider("Max Debate Rounds", min_value=1, max_value=5, value=config.max_debate_rounds)

@@ -1,7 +1,10 @@
+import numpy as np
 from typing import Dict, Any
 from graph.state import VeritasState
 from models.agents import BeliefVector
 from consensus.degroot import run_degroot_consensus
+from consensus.convergence import compute_max_disagreement
+from config import config
 from utils.audit_trail import format_audit_log
 
 
@@ -30,14 +33,20 @@ def degroot_consensus_node(state: VeritasState) -> Dict[str, Any]:
         round_number=state.get("current_round", 0) + 1,
         agent_beliefs=beliefs,
         judge_trust_weights=trust_weights,
-        convergence_threshold=1e-4,
-        max_iterations=50,
+        convergence_threshold=config.convergence_threshold,
+        max_iterations=config.max_consensus_iterations,
     )
+
+    # Check whether debate agents have reached consensus based on disagreement threshold
+    beliefs_matrix = np.array([bv.to_list() for bv in beliefs.values()])
+    disagreement = compute_max_disagreement(beliefs_matrix)
+    consensus_converged = bool(result.converged and (disagreement <= config.conflict_threshold))
 
     fc = result.final_consensus
     log_msg = format_audit_log(
         "DeGroot Consensus Engine",
-        f"Converged={result.converged} in {result.iterations_run} iteration(s). "
+        f"SolverConverged={result.converged} (Disagreement={disagreement:.3f}, ConsensusReached={consensus_converged}) "
+        f"in {result.iterations_run} iteration(s). "
         f"Consensus: P(Supp)={fc.supported:.2f}, P(Ref)={fc.refuted:.2f}, P(Unk)={fc.unknown:.2f}"
     )
 
@@ -46,7 +55,7 @@ def degroot_consensus_node(state: VeritasState) -> Dict[str, Any]:
 
     return {
         "consensus_results": consensus_list,
-        "consensus_converged": result.converged,
+        "consensus_converged": consensus_converged,
         "trust_matrix": result.trust_matrix,
         "current_round": state.get("current_round", 0) + 1,
         "audit_trail": [log_msg],

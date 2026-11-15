@@ -46,6 +46,17 @@ class Config:
         default_factory=lambda: os.environ.get("FINAL_VERIFIER_MODEL", "claude-sonnet-4-6")
     )
 
+    # FC-MAD Agent Models
+    debater_model: str = field(
+        default_factory=lambda: os.environ.get("DEBATER_MODEL", "claude-haiku-4-5-20251001")
+    )
+    summarizer_model: str = field(
+        default_factory=lambda: os.environ.get("SUMMARIZER_MODEL", "claude-haiku-4-5-20251001")
+    )
+    output_agent_model: str = field(
+        default_factory=lambda: os.environ.get("OUTPUT_AGENT_MODEL", "claude-sonnet-4-6")
+    )
+
     # ── Autonomous Multi-Agent Loop Thresholds ──────────────────────────────
     max_debate_rounds: int = 3
     max_research_rounds: int = 2
@@ -57,6 +68,95 @@ class Config:
     # ── DeGroot Consensus Settings ──────────────────────────────────────────
     convergence_threshold: float = 1e-4
     max_consensus_iterations: int = 50
+
+    # ── Robustness & Retries ────────────────────────────────────────────────
+    max_retries: int = field(
+        default_factory=lambda: int(os.environ.get("MAX_RETRIES", "2"))
+    )
+
+    # ── FC-MAD Mode Settings (docs/FCMAD_MATH.md) ───────────────────────────
+    num_debaters: int = field(
+        default_factory=lambda: int(os.environ.get("FCMAD_NUM_DEBATERS", "3"))
+    )
+    alpha: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_ALPHA", "0.7"))
+    )
+    epsilon: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_EPSILON", "0.10"))
+    )
+    max_rounds_fcmad: int = field(
+        default_factory=lambda: int(os.environ.get("FCMAD_MAX_ROUNDS", "4"))
+    )
+    samples_per_debater: int = field(
+        default_factory=lambda: int(os.environ.get("FCMAD_SAMPLES_PER_DEBATER", "3"))
+    )
+    debater_temperature: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_DEBATER_TEMPERATURE", "0.7"))
+    )
+    abstain_target_accuracy: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_ABSTAIN_TARGET_ACCURACY", "0.90"))
+    )
+    calibration_enabled: bool = field(
+        default_factory=lambda: os.environ.get("FCMAD_CALIBRATION", "false").lower() in ("true", "1", "yes")
+    )
+    abstain_threshold: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_ABSTAIN_THRESHOLD", "0.60"))
+    )
+    temperature_scaling_T: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_TEMPERATURE_T", "1.0"))
+    )
+    summarizer_token_cap: int = field(
+        default_factory=lambda: int(os.environ.get("FCMAD_SUMMARIZER_TOKEN_CAP", "300"))
+    )
+
+    # ── FC-MAD Ablation Toggles (docs/FCMAD_MATH.md Section 10) ─────────────
+    fcmad_equal_weights: bool = field(
+        default_factory=lambda: os.environ.get("FCMAD_EQUAL_WEIGHTS", "false").lower() in ("true", "1", "yes")
+    )
+    fcmad_no_degroot: bool = field(
+        default_factory=lambda: os.environ.get("FCMAD_NO_DEGROOT", "false").lower() in ("true", "1", "yes")
+    )
+    fcmad_no_summarizer: bool = field(
+        default_factory=lambda: os.environ.get("FCMAD_NO_SUMMARIZER", "false").lower() in ("true", "1", "yes")
+    )
+
+    # ── Calibration & Evaluation Harness Settings ───────────────────────────
+    calibration_params_path: str = field(
+        default_factory=lambda: os.environ.get("CALIBRATION_PARAMS_PATH", "eval/calibration_params.json")
+    )
+    eval_backbone_model: str = field(
+        default_factory=lambda: os.environ.get("EVAL_BACKBONE_MODEL", "claude-haiku-4-5-20251001")
+    )
+    eval_seeds: list = field(
+        default_factory=lambda: [42, 43, 44]
+    )
+    fever_dataset_path: str = field(
+        default_factory=lambda: os.environ.get("FEVER_DATASET_PATH", "data/fever_dev.jsonl")
+    )
+    xfact_dataset_path: str = field(
+        default_factory=lambda: os.environ.get("XFACT_DATASET_PATH", "data/xfact.jsonl")
+    )
+
+    # Pricing per 1M tokens for telemetry and cost tracking ($ USD)
+    prompt_cost_per_million: float = field(
+        default_factory=lambda: float(os.environ.get("PROMPT_COST_PER_MILLION", "1.0"))
+    )
+    completion_cost_per_million: float = field(
+        default_factory=lambda: float(os.environ.get("COMPLETION_COST_PER_MILLION", "3.0"))
+    )
+
+    # ── LLM Response Cache Settings ─────────────────────────────────────────
+    llm_cache_enabled: bool = field(
+        default_factory=lambda: os.environ.get("LLM_CACHE_ENABLED", "true").lower() in ("true", "1", "yes")
+    )
+    llm_cache_path: str = field(
+        default_factory=lambda: os.environ.get("LLM_CACHE_PATH", ".cache/llm_cache.sqlite")
+    )
+
+    @property
+    def calibration_on(self) -> bool:
+        """Alias for calibration_enabled."""
+        return self.calibration_enabled
 
     # ── Search Settings ─────────────────────────────────────────────────────
     search_max_results: int = 4

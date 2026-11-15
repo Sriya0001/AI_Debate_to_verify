@@ -42,3 +42,7 @@ Thumbs.db
 
 # Streamlit secrets
 .streamlit/secrets.toml
+
+# LLM response cache and evaluation run outputs
+.cache/
+eval_results/

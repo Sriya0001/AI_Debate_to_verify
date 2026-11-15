@@ -46,6 +46,7 @@ def execute_audit(request: AuditRequest) -> AuditResponse:
             mode=request.mode,
             max_rounds=request.max_rounds,
             max_research_rounds=request.max_research_rounds,
+            evidence=request.evidence,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Verification execution failed: {str(e)}")
@@ -62,6 +63,10 @@ def execute_audit(request: AuditRequest) -> AuditResponse:
             why_not_other_verdicts=v.why_not_other_verdicts,
             debate_rounds=v.debate_rounds,
             consensus_iterations=v.consensus_iterations,
+            final_distribution=v.final_distribution,
+            raw_confidence=v.raw_confidence,
+            calibrated_confidence=v.calibrated_confidence,
+            abstain=v.abstain,
         )
         for v in result.verdicts
     ]
@@ -77,6 +82,10 @@ def execute_audit(request: AuditRequest) -> AuditResponse:
         execution_time_seconds=result.execution_time_seconds,
         total_searches=result.total_searches,
         total_llm_calls=result.total_llm_calls,
+        final_distribution=result.final_distribution,
+        raw_confidence=result.raw_confidence,
+        calibrated_confidence=result.calibrated_confidence,
+        abstain=result.abstain,
     )
 
 
