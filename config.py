@@ -58,6 +58,11 @@ class Config:
     convergence_threshold: float = 1e-4
     max_consensus_iterations: int = 50
 
+    # ── Robustness & Retries ────────────────────────────────────────────────
+    max_retries: int = field(
+        default_factory=lambda: int(os.environ.get("MAX_RETRIES", "2"))
+    )
+
     # ── Search Settings ─────────────────────────────────────────────────────
     search_max_results: int = 4
     search_depth: str = "basic"  # "basic" | "advanced"

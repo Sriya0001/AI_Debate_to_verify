@@ -26,22 +26,22 @@ def route_after_consensus(state: VeritasState) -> Union[str, List[str]]:
     research_rounds = state.get("research_rounds", 0)
     max_research_rounds = state.get("max_research_rounds", config.max_research_rounds)
 
-    # 1. If consensus has already converged, proceed directly to final verifier
-    if consensus_converged:
-        return "final_verifier"
-
-    # 2. Check if Socratic Critic requested additional research
+    # 1. Check if Socratic Critic requested additional research
     if critic_requests and research_rounds < max_research_rounds:
         return "autonomous_research"
 
-    # 3. Check if evidence is critically insufficient
+    # 2. Check if evidence is critically insufficient
     if len(evidence_items) < config.min_evidence_count and research_rounds < max_research_rounds:
         return "autonomous_research"
 
-    # 4. Check for high-credibility conflicting sources
+    # 3. Check for high-credibility conflicting sources
     has_conflict = _detect_source_conflict(evidence_items, source_scores)
     if has_conflict and research_rounds < max_research_rounds:
         return "autonomous_research"
+
+    # 4. If debate consensus has already converged, proceed directly to final verifier
+    if consensus_converged:
+        return "final_verifier"
 
     # 5. Check for high disagreement between agents if rounds remain
     if belief_vectors:

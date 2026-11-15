@@ -41,7 +41,12 @@ def autonomous_research_node(state: VeritasState) -> Dict[str, Any]:
 
 
 def debate_turn_increment_node(state: VeritasState) -> Dict[str, Any]:
-    """Increments debate round counter when re-entering debate loop."""
+    """
+    Increments debate round counter when re-entering debate loop.
+    Note: In the standard VERITAS graph, current_round is incremented inside
+    degroot_consensus_node (consensus/node.py) at the completion of each round.
+    This helper is preserved for custom subgraphs or backward compatibility.
+    """
     return {"current_round": state.get("current_round", 0) + 1}
 
 

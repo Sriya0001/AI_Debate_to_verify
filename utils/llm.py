@@ -334,6 +334,24 @@ class MockLLM:
                     "verification_complete": True
                 })
 
+        # 11. Single LLM direct baseline prompt
+        if "verify this claim:" in lower:
+            if any(term in lower for term in ["green cheese", "flat earth", "10 percent", "brain capacity", "failed mathematics", "great wall"]):
+                return json.dumps({
+                    "verdict": "REFUTED",
+                    "confidence": 0.85
+                })
+            elif any(term in lower for term in ["alien", "extraterrestrial", "project titan", "secret tunnel", "quantum computers definitively", "secondary tower"]):
+                return json.dumps({
+                    "verdict": "NOT_ENOUGH_INFORMATION",
+                    "confidence": 0.60
+                })
+            else:
+                return json.dumps({
+                    "verdict": "SUPPORTED",
+                    "confidence": 0.80
+                })
+
         # Default fallback
         return json.dumps({"status": "ok", "message": "Default mock response."})
 

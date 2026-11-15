@@ -1,6 +1,8 @@
 import time
 import json
-from typing import Dict, Any, List
+import re
+import logging
+from typing import Dict, Any, List, Optional
 import numpy as np
 
 from config import config
@@ -8,6 +10,8 @@ from eval.dataset import BENCHMARK_CLAIMS, load_benchmark_dataset
 from runner import run_audit
 from utils.llm import get_llm
 from models.verdict import VerdictType
+
+logger = logging.getLogger(__name__)
 
 
 def run_single_llm_baseline(claim_text: str) -> Dict[str, Any]:
@@ -18,21 +22,52 @@ def run_single_llm_baseline(claim_text: str) -> Dict[str, Any]:
         f"Verify this claim:\n\"{claim_text}\"\n\n"
         "Respond with a JSON object: {\"verdict\": \"SUPPORTED\" | \"REFUTED\" | \"NOT_ENOUGH_INFORMATION\", \"confidence\": 0.0-1.0}"
     )
-    try:
-        from langchain_core.messages import HumanMessage
-        resp = llm.invoke([HumanMessage(content=prompt)])
-        raw = resp.content.strip().replace("```json", "").replace("```", "")
-        data = json.loads(raw)
-        verdict = data.get("verdict", "SUPPORTED").upper()
-        conf = float(data.get("confidence", 0.7))
-    except Exception:
-        verdict = "SUPPORTED"
-        conf = 0.5
+    from langchain_core.messages import HumanMessage
 
+    last_error = None
+    for attempt in range(config.max_retries):
+        try:
+            resp = llm.invoke([HumanMessage(content=prompt)])
+            raw = resp.content.strip()
+            if raw.startswith("```"):
+                raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = re.sub(r"\s*```$", "", raw)
+            data = json.loads(raw)
+            raw_verdict = data.get("verdict")
+            if not raw_verdict:
+                raise ValueError("Missing 'verdict' key in LLM response.")
+            verdict = str(raw_verdict).strip().upper()
+            if verdict not in ["SUPPORTED", "REFUTED", "NOT_ENOUGH_INFORMATION"]:
+                raise ValueError(f"Invalid verdict '{verdict}' from LLM.")
+            conf = float(data.get("confidence", 0.7))
+            return {
+                "verdict": verdict,
+                "confidence": conf,
+                "latency": round(time.time() - t0, 3),
+                "failed": False,
+                "error": None,
+            }
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "Single LLM baseline attempt %d/%d failed: %s",
+                attempt + 1,
+                config.max_retries,
+                e,
+            )
+
+    # Explicit failure recording: never hide an error as a prediction/verdict
+    logger.error(
+        "Single LLM baseline failed after %d attempt(s): %s",
+        config.max_retries,
+        last_error,
+    )
     return {
-        "verdict": verdict,
-        "confidence": conf,
+        "verdict": None,
+        "confidence": None,
         "latency": round(time.time() - t0, 3),
+        "failed": True,
+        "error": str(last_error),
     }
 
 
@@ -78,32 +113,63 @@ def compute_ece(confidences: List[float], predictions: List[str], ground_truths:
     return float(round(ece, 3))
 
 
-def compute_metrics(predictions: List[str], ground_truths: List[str], confidences: List[float], latencies: List[float]):
+def compute_metrics(
+    predictions: List[Optional[str]],
+    ground_truths: List[str],
+    confidences: List[Optional[float]],
+    latencies: List[float],
+    failed_count: Optional[int] = None,
+) -> Dict[str, Any]:
     classes = ["SUPPORTED", "REFUTED", "NOT_ENOUGH_INFORMATION"]
-    n = len(ground_truths)
-    if n == 0:
-        return {}
 
-    correct = sum(1 for p, g in zip(predictions, ground_truths) if p == g)
+    # Filter out failed items where prediction is missing or invalid
+    valid_data = [
+        (p, g, c, l)
+        for p, g, c, l in zip(predictions, ground_truths, confidences, latencies)
+        if p is not None and p in classes and c is not None
+    ]
+
+    inferred_failed = len(predictions) - len(valid_data)
+    total_failed = (failed_count if failed_count is not None else 0) + inferred_failed
+
+    n = len(valid_data)
+    if n == 0:
+        return {
+            "accuracy": 0.0,
+            "macro_f1": 0.0,
+            "avg_latency_sec": 0.0,
+            "pct_not_enough_info": 0.0,
+            "ece": 0.0,
+            "confusion_matrix": {gt: {pred: 0 for pred in classes} for gt in classes},
+            "failed_count": total_failed,
+            "total_evaluated": 0,
+        }
+
+    valid_preds = [x[0] for x in valid_data]
+    valid_gts = [x[1] for x in valid_data]
+    valid_confs = [x[2] for x in valid_data]
+    valid_lats = [x[3] for x in valid_data]
+
+    correct = sum(1 for p, g in zip(valid_preds, valid_gts) if p == g)
     accuracy = correct / n
 
     # Macro F1
     f1_list = []
     for c in classes:
-        tp = sum(1 for p, g in zip(predictions, ground_truths) if p == c and g == c)
-        fp = sum(1 for p, g in zip(predictions, ground_truths) if p == c and g != c)
-        fn = sum(1 for p, g in zip(predictions, ground_truths) if p != c and g == c)
+        tp = sum(1 for p, g in zip(valid_preds, valid_gts) if p == c and g == c)
+        fp = sum(1 for p, g in zip(valid_preds, valid_gts) if p == c and g != c)
+        fn = sum(1 for p, g in zip(valid_preds, valid_gts) if p != c and g == c)
 
         prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = (2 * prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
         f1_list.append(f1)
 
-    macro_f1 = np.mean(f1_list)
-    avg_latency = np.mean(latencies)
-    pct_nei = sum(1 for p in predictions if p == "NOT_ENOUGH_INFORMATION") / n
-    ece = compute_ece(confidences, predictions, ground_truths)
-    cm = compute_confusion_matrix(predictions, ground_truths, classes)
+    macro_f1 = float(np.mean(f1_list))
+    avg_latency = float(np.mean(valid_lats))
+    pct_nei = sum(1 for p in valid_preds if p == "NOT_ENOUGH_INFORMATION") / n
+    ece = compute_ece(valid_confs, valid_preds, valid_gts)
+    cm = compute_confusion_matrix(valid_preds, valid_gts, classes)
 
     return {
         "accuracy": round(accuracy, 3),
@@ -112,6 +178,8 @@ def compute_metrics(predictions: List[str], ground_truths: List[str], confidence
         "pct_not_enough_info": round(pct_nei * 100, 1),
         "ece": ece,
         "confusion_matrix": cm,
+        "failed_count": total_failed,
+        "total_evaluated": n,
     }
 
 
@@ -181,12 +249,14 @@ def run_benchmark(sample_size: int = 6, dataset_path: str = None) -> Dict[str, A
     print(f"| Expected Calib Error     | {s_metrics['ece']:.3f}      | {b_metrics['ece']:.3f}                 | {v_metrics['ece']:.3f}      |")
     print(f"| Avg Latency              | {s_metrics['avg_latency_sec']}s       | {b_metrics['avg_latency_sec']}s                 | {v_metrics['avg_latency_sec']}s       |")
     print(f"| % NOT_ENOUGH_INFO        | {s_metrics['pct_not_enough_info']}%       | {b_metrics['pct_not_enough_info']}%                 | {v_metrics['pct_not_enough_info']}%      |")
+    print(f"| Failed Items             | {s_metrics.get('failed_count', 0)}          | {b_metrics.get('failed_count', 0)}                     | {v_metrics.get('failed_count', 0)}          |")
     print(f"| Mathematical Consensus   | No         | No                    | DeGroot    |")
     print(f"| Socratic Epistemic Probe | No         | No                    | Yes        |")
     print(f"| Source Credibility Model | No         | No                    | 6-Tier     |")
 
     print("\n=== VERITAS AI CONFUSION MATRIX ===")
-    print(f"{'Actual \\ Predicted':<25} | {'SUPPORTED':<12} | {'REFUTED':<12} | {'NOT_ENOUGH_INFO':<17}")
+    header_col = "Actual \\ Predicted"
+    print(f"{header_col:<25} | {'SUPPORTED':<12} | {'REFUTED':<12} | {'NOT_ENOUGH_INFO':<17}")
     print("-" * 75)
     for actual, row in v_metrics["confusion_matrix"].items():
         print(f"{actual:<25} | {row.get('SUPPORTED', 0):<12} | {row.get('REFUTED', 0):<12} | {row.get('NOT_ENOUGH_INFORMATION', 0):<17}")

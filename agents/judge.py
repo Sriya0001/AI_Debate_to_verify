@@ -1,5 +1,6 @@
 import json
 import re
+import logging
 from typing import Dict, Any, List
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -8,6 +9,9 @@ from models.agents import JudgeEvaluation, AgentPosition
 from tools.evidence import evidence_pool
 from utils.llm import get_llm
 from utils.audit_trail import format_audit_log
+from config import config
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """You are the Judge Agent in VERITAS AI.
@@ -105,10 +109,39 @@ Evaluate argument quality, source reliance, and assign normalized trust weights.
         HumanMessage(content=prompt),
     ]
 
-    try:
-        response = llm.invoke(messages)
-        evaluation = _parse_judge_response(response.content, claim_id, state.get("current_round", 0))
-    except Exception as e:
+    evaluation = None
+    failure_reason = None
+    audit_entries = []
+
+    for attempt in range(config.max_retries):
+        try:
+            response = llm.invoke(messages)
+            evaluation = _parse_judge_response(response.content, claim_id, state.get("current_round", 0))
+            failure_reason = None
+            break
+        except Exception as e:
+            failure_reason = str(e)
+            logger.warning(
+                "Judge evaluation attempt %d/%d failed for claim %s: %s",
+                attempt + 1,
+                config.max_retries,
+                claim_id,
+                e,
+            )
+
+    if evaluation is None:
+        logger.error(
+            "Judge evaluation failed after %d attempt(s) for claim %s; applying fallback fixed trust weights. Error: %s",
+            config.max_retries,
+            claim_id,
+            failure_reason,
+        )
+        audit_entries.append(
+            format_audit_log(
+                "Judge",
+                f"WARNING: Judge evaluation failed after {config.max_retries} attempt(s) ({failure_reason}); applying fallback fixed trust weights.",
+            )
+        )
         evaluation = _fallback_judge_evaluation(claim_id, state.get("current_round", 0))
 
     tw_str = ", ".join(f"{k}: {v:.2f}" for k, v in evaluation.agent_trust_weights.items())
@@ -116,12 +149,13 @@ Evaluate argument quality, source reliance, and assign normalized trust weights.
         "Judge",
         f"Assigned trust weights: [{tw_str}] | Rationale: {evaluation.rationale[:80]}..."
     )
+    audit_entries.append(log_msg)
 
     return {
         "judge_evaluations": [evaluation],
         "trust_weights": evaluation.agent_trust_weights,
-        "audit_trail": [log_msg],
-        "error": None,
+        "audit_trail": audit_entries,
+        "error": f"Judge fallback: {failure_reason}" if failure_reason else None,
     }
 
 
