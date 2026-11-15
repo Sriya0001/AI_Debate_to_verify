@@ -7,6 +7,16 @@ from config import config
 from utils.audit_trail import format_audit_log
 
 
+def route_pipeline_mode(state: VeritasState) -> Union[str, List[str]]:
+    """
+    Routes after source credibility analysis to either FC-MAD or Veritas debate agents.
+    """
+    mode = state.get("pipeline_mode", "veritas").lower()
+    if mode == "fcmad":
+        return "fcmad_debaters_round0"
+    return ["advocate", "skeptic", "neutral"]
+
+
 def route_after_consensus(state: VeritasState) -> Union[str, List[str]]:
     """
     Autonomous Router evaluating state after DeGroot consensus.

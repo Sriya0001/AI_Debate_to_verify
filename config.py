@@ -46,6 +46,17 @@ class Config:
         default_factory=lambda: os.environ.get("FINAL_VERIFIER_MODEL", "claude-sonnet-4-6")
     )
 
+    # FC-MAD Agent Models
+    debater_model: str = field(
+        default_factory=lambda: os.environ.get("DEBATER_MODEL", "claude-haiku-4-5-20251001")
+    )
+    summarizer_model: str = field(
+        default_factory=lambda: os.environ.get("SUMMARIZER_MODEL", "claude-haiku-4-5-20251001")
+    )
+    output_agent_model: str = field(
+        default_factory=lambda: os.environ.get("OUTPUT_AGENT_MODEL", "claude-sonnet-4-6")
+    )
+
     # ── Autonomous Multi-Agent Loop Thresholds ──────────────────────────────
     max_debate_rounds: int = 3
     max_research_rounds: int = 2
@@ -62,6 +73,46 @@ class Config:
     max_retries: int = field(
         default_factory=lambda: int(os.environ.get("MAX_RETRIES", "2"))
     )
+
+    # ── FC-MAD Mode Settings (docs/FCMAD_MATH.md) ───────────────────────────
+    num_debaters: int = field(
+        default_factory=lambda: int(os.environ.get("FCMAD_NUM_DEBATERS", "3"))
+    )
+    alpha: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_ALPHA", "0.7"))
+    )
+    epsilon: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_EPSILON", "0.10"))
+    )
+    max_rounds_fcmad: int = field(
+        default_factory=lambda: int(os.environ.get("FCMAD_MAX_ROUNDS", "4"))
+    )
+    samples_per_debater: int = field(
+        default_factory=lambda: int(os.environ.get("FCMAD_SAMPLES_PER_DEBATER", "3"))
+    )
+    debater_temperature: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_DEBATER_TEMPERATURE", "0.7"))
+    )
+    abstain_target_accuracy: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_ABSTAIN_TARGET_ACCURACY", "0.90"))
+    )
+    calibration_enabled: bool = field(
+        default_factory=lambda: os.environ.get("FCMAD_CALIBRATION", "false").lower() in ("true", "1", "yes")
+    )
+    abstain_threshold: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_ABSTAIN_THRESHOLD", "0.60"))
+    )
+    temperature_scaling_T: float = field(
+        default_factory=lambda: float(os.environ.get("FCMAD_TEMPERATURE_T", "1.0"))
+    )
+    summarizer_token_cap: int = field(
+        default_factory=lambda: int(os.environ.get("FCMAD_SUMMARIZER_TOKEN_CAP", "300"))
+    )
+
+    @property
+    def calibration_on(self) -> bool:
+        """Alias for calibration_enabled."""
+        return self.calibration_enabled
 
     # ── Search Settings ─────────────────────────────────────────────────────
     search_max_results: int = 4

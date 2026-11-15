@@ -30,7 +30,7 @@ class VeritasState(TypedDict):
     # ── User Input & Mode ───────────────────────────────────────────────────
     input_text: str
     source_label: Optional[str]
-    pipeline_mode: str  # "veritas" | "baseline"
+    pipeline_mode: str  # "veritas" | "baseline" | "fcmad"
 
     # ── Claim Analysis ──────────────────────────────────────────────────────
     atomic_claims: List[AtomicClaim]
@@ -64,6 +64,20 @@ class VeritasState(TypedDict):
     escalate_to_human: bool
     verification_complete: bool
 
+    # ── FC-MAD State (docs/FCMAD_MATH.md) ───────────────────────────────────
+    per_round_beliefs: List[List[List[float]]]
+    credibilities: List[float]
+    disagreement_history: List[float]
+    rounds_used: int
+    final_distribution: Optional[List[float]]
+    raw_confidence: Optional[float]
+    calibrated_confidence: Optional[float]
+    abstain: bool
+    recorded_failures: List[Dict[str, Any]]
+    fcmad_debate_summary: Optional[str]
+    fcmad_quality_scores: Dict[str, float]
+    provided_evidence: Optional[List[EvidenceItem]]
+
     # ── Final Verdict & Audit Trail ─────────────────────────────────────────
     final_verdicts: List[FinalVerdict]
     aggregate_verdict: Optional[VerdictType]
@@ -79,10 +93,31 @@ def initial_veritas_state(
     pipeline_mode: str = "veritas",
     max_rounds: int = 3,
     max_research_rounds: int = 2,
+    provided_evidence: Optional[List[Any]] = None,
 ) -> VeritasState:
     """
     Constructs a pristine starting state for a VERITAS verification session.
+    Supports "veritas", "baseline", and "fcmad" pipeline modes.
     """
+    evidence_items: List[EvidenceItem] = []
+    if provided_evidence:
+        for idx, item in enumerate(provided_evidence):
+            if isinstance(item, EvidenceItem):
+                evidence_items.append(item)
+            elif isinstance(item, dict):
+                ev = EvidenceItem(
+                    evidence_id=item.get("evidence_id", f"E{idx+1}"),
+                    claim_id=item.get("claim_id", "C1"),
+                    query=item.get("query", "provided_evidence"),
+                    url=item.get("url", "http://provided.source"),
+                    title=item.get("title", "Provided Evidence"),
+                    snippet=item.get("snippet", item.get("text", "")),
+                    source_domain=item.get("source_domain", "provided.source"),
+                    supports_claim=item.get("supports_claim"),
+                    relevance_score=float(item.get("relevance_score", 1.0)),
+                )
+                evidence_items.append(ev)
+
     return VeritasState(
         input_text=input_text,
         source_label=source_label,
@@ -91,7 +126,7 @@ def initial_veritas_state(
         pending_claim_ids=[],
         current_claim=None,
         research_plan=[],
-        evidence_pool=[],
+        evidence_pool=evidence_items,
         source_scores={},
         agent_positions=[],
         critic_challenges=[],
@@ -108,6 +143,18 @@ def initial_veritas_state(
         consensus_converged=False,
         escalate_to_human=False,
         verification_complete=False,
+        per_round_beliefs=[],
+        credibilities=[],
+        disagreement_history=[],
+        rounds_used=0,
+        final_distribution=None,
+        raw_confidence=None,
+        calibrated_confidence=None,
+        abstain=False,
+        recorded_failures=[],
+        fcmad_debate_summary=None,
+        fcmad_quality_scores={},
+        provided_evidence=evidence_items if evidence_items else None,
         final_verdicts=[],
         aggregate_verdict=None,
         aggregate_confidence=None,

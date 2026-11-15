@@ -1,6 +1,7 @@
 import uuid
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Union
+from config import config
 
 from graph.graph import veritas_graph
 from graph.state import initial_veritas_state, VeritasState
@@ -16,21 +17,23 @@ def run_audit(
     text: str,
     source_label: Optional[str] = None,
     mode: str = "veritas",
-    max_rounds: int = 3,
+    max_rounds: Optional[int] = None,
     max_research_rounds: int = 2,
+    evidence: Optional[List[Any]] = None,
 ) -> AuditSessionResult:
     """
-    Executes a fact verification session under either VERITAS mode or Baseline mode.
+    Executes a fact verification session under VERITAS mode, FCMAD mode, or Baseline mode.
 
     Args:
         text: Claim or paragraph text to audit.
         source_label: Optional label denoting source (e.g. 'GPT-4o response').
-        mode: 'veritas' (10-agent autonomous consensus) or 'baseline' (5-agent ClaimAuditor).
+        mode: 'veritas' (10-agent consensus), 'fcmad' (FC-MAD DeGroot consensus), or 'baseline' (5-agent ClaimAuditor).
         max_rounds: Max debate rounds.
         max_research_rounds: Max research iteration loops.
+        evidence: Optional provided evidence (e.g. gold evidence from benchmark datasets) to skip external search.
 
     Returns:
-        Structured AuditSessionResult with claims, verdicts, DeGroot consensus, metrics, and audit trail.
+        Structured AuditSessionResult with claims, verdicts, consensus distributions, metrics, and audit trail.
     """
     metrics.reset()
     start_time = time.time()
@@ -38,17 +41,26 @@ def run_audit(
 
     # Mode 1: Baseline Mode
     if mode.lower() == "baseline":
-        result = run_baseline_audit(text, source_label, max_rounds)
+        rounds = max_rounds if max_rounds is not None else 2
+        result = run_baseline_audit(text, source_label, rounds)
         repository.save_session(result)
         return result
 
-    # Mode 2: VERITAS Mode (Default)
+    # Mode 2: VERITAS or FC-MAD Mode
+    pipe_mode = mode.lower()
+    if pipe_mode == "fcmad":
+        effective_max_rounds = max_rounds if max_rounds is not None else config.max_rounds_fcmad
+    else:
+        pipe_mode = "veritas"
+        effective_max_rounds = max_rounds if max_rounds is not None else config.max_debate_rounds
+
     state = initial_veritas_state(
         input_text=text,
         source_label=source_label,
-        pipeline_mode="veritas",
-        max_rounds=max_rounds,
+        pipeline_mode=pipe_mode,
+        max_rounds=effective_max_rounds,
         max_research_rounds=max_research_rounds,
+        provided_evidence=evidence,
     )
 
     final_state: VeritasState = veritas_graph.invoke(state)
@@ -59,12 +71,12 @@ def run_audit(
     # Aggregate verdict calculation
     agg_verdict = final_state.get("aggregate_verdict") or VerdictType.NOT_ENOUGH_INFORMATION
     agg_conf = final_state.get("aggregate_confidence") or 0.70
-    summary = final_state.get("audit_summary") or "VERITAS deliberation complete."
+    summary = final_state.get("audit_summary") or f"{mode.upper()} deliberation complete."
 
     session_result = AuditSessionResult(
         session_id=session_id,
         input_text=text,
-        mode="veritas",
+        mode=mode,
         claims=final_state.get("atomic_claims", []),
         verdicts=final_state.get("final_verdicts", []),
         aggregate_verdict=agg_verdict,
@@ -75,6 +87,11 @@ def run_audit(
         total_searches=metrics_summary.get("total_searches", 0),
         total_llm_calls=metrics_summary.get("total_llm_calls", 0),
         estimated_tokens=metrics_summary.get("total_tokens", 0),
+        final_distribution=final_state.get("final_distribution"),
+        raw_confidence=final_state.get("raw_confidence"),
+        calibrated_confidence=final_state.get("calibrated_confidence"),
+        abstain=final_state.get("abstain", False),
+        recorded_failures=final_state.get("recorded_failures", []),
     )
 
     # Persist in database

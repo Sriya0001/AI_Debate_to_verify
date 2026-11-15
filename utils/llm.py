@@ -352,6 +352,98 @@ class MockLLM:
                     "confidence": 0.80
                 })
 
+        # 12. FC-MAD Debater Agent prompt
+        if "you are debater" in lower or ("fc-mad" in lower and "evaluate the claim using only the provided evidence" in lower):
+            is_revision = "summary of previous debate arguments:" in lower
+            
+            # Scenario: Persistent dispute (hits max rounds)
+            if "persistent dispute" in lower or "hits max rounds" in lower:
+                if "debater 0" in lower or "debater_0" in lower:
+                    vec = {"supported": 0.90, "refuted": 0.05, "unknown": 0.05}
+                    pos = "SUPPORTED"
+                elif "debater 1" in lower or "debater_1" in lower:
+                    vec = {"supported": 0.05, "refuted": 0.90, "unknown": 0.05}
+                    pos = "REFUTED"
+                else:
+                    vec = {"supported": 0.10, "refuted": 0.10, "unknown": 0.80}
+                    pos = "NOT_ENOUGH_INFORMATION"
+                return json.dumps({
+                    "position": pos,
+                    "probabilities": vec,
+                    "cited_evidence_ids": ["E1"],
+                    "reasoning": "Holding firm position based on strict interpretation of the evidence."
+                })
+
+            # Scenario: Disagree then converge
+            if "converge" in lower:
+                if not is_revision:
+                    # Round 0: Disagree
+                    if "debater 0" in lower or "debater_0" in lower:
+                        vec = {"supported": 0.85, "refuted": 0.10, "unknown": 0.05}
+                        pos = "SUPPORTED"
+                    elif "debater 1" in lower or "debater_1" in lower:
+                        vec = {"supported": 0.15, "refuted": 0.80, "unknown": 0.05}
+                        pos = "REFUTED"
+                    else:
+                        vec = {"supported": 0.50, "refuted": 0.30, "unknown": 0.20}
+                        pos = "SUPPORTED"
+                    return json.dumps({
+                        "position": pos,
+                        "probabilities": vec,
+                        "cited_evidence_ids": ["E1"],
+                        "reasoning": "Initial round assessment showing divergent perspective."
+                    })
+                else:
+                    # Later round: Converge
+                    return json.dumps({
+                        "position": "SUPPORTED",
+                        "probabilities": {"supported": 0.84, "refuted": 0.09, "unknown": 0.07},
+                        "cited_evidence_ids": ["E1", "E2"],
+                        "reasoning": "Re-evaluated arguments in light of the debate summary; consensus established."
+                    })
+
+            # Default: Debaters agree
+            if any(term in lower for term in ["green cheese", "flat earth", "10 percent", "brain capacity", "failed mathematics", "great wall"]):
+                return json.dumps({
+                    "position": "REFUTED",
+                    "probabilities": {"supported": 0.04, "refuted": 0.92, "unknown": 0.04},
+                    "cited_evidence_ids": ["E1", "E2"],
+                    "reasoning": "Retrieved documentation decisively refutes the statement."
+                })
+            elif any(term in lower for term in ["alien", "extraterrestrial", "project titan", "secret tunnel", "quantum computers definitively", "secondary tower"]):
+                return json.dumps({
+                    "position": "NOT_ENOUGH_INFORMATION",
+                    "probabilities": {"supported": 0.15, "refuted": 0.15, "unknown": 0.70},
+                    "cited_evidence_ids": ["E1"],
+                    "reasoning": "Evidence is insufficient to verify the claim."
+                })
+            else:
+                return json.dumps({
+                    "position": "SUPPORTED",
+                    "probabilities": {"supported": 0.85, "refuted": 0.08, "unknown": 0.07},
+                    "cited_evidence_ids": ["E1", "E2"],
+                    "reasoning": "Verified facts corroborated by primary documentation."
+                })
+
+        # 13. FC-MAD Summarizer Agent prompt
+        if "you are the summarizer agent in the fc-mad" in lower or "produce a concise debate summary" in lower:
+            return "Debate Summary: Debaters analyzed primary evidence citations. All participants aligned on core factual grounding, with minor nuances addressed regarding secondary accounts."
+
+        # 14. FC-MAD Judge Agent prompt (Quality scores only)
+        if "judge agent in the fc-mad" in lower or "argument quality scores q_i" in lower:
+            return json.dumps({
+                "argument_quality_scores": {
+                    "debater_0": 0.88,
+                    "debater_1": 0.85,
+                    "debater_2": 0.82
+                },
+                "rationale": "All debaters provided rigorous citations to the retrieved evidence pool with sound logical coherence."
+            })
+
+        # 15. FC-MAD Output Agent prompt
+        if "output agent in the fc-mad" in lower or "narrative explanation justifying this verdict" in lower:
+            return "The consensus deliberation concluded with a clear verdict based on the corroborating evidence retrieved and debater consensus across rounds."
+
         # Default fallback
         return json.dumps({"status": "ok", "message": "Default mock response."})
 

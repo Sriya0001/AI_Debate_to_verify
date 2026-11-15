@@ -188,7 +188,8 @@ def run_benchmark(sample_size: int = 6, dataset_path: str = None) -> Dict[str, A
     Executes comparison between:
     1. Single LLM Direct
     2. ClaimAuditor Baseline (5 agents)
-    3. VERITAS AI (10 agents, DeGroot consensus)
+    3. FC-MAD (Fast Credibility-Weighted Multi-Agent Debate)
+    4. VERITAS AI (10 agents, DeGroot consensus)
     """
     raw_dataset = load_benchmark_dataset(dataset_path)
     test_set = raw_dataset[:sample_size]
@@ -209,12 +210,14 @@ def run_benchmark(sample_size: int = 6, dataset_path: str = None) -> Dict[str, A
 
     single_preds, single_confs, single_lats = [], [], []
     base_preds, base_confs, base_lats = [], [], []
+    fcmad_preds, fcmad_confs, fcmad_lats = [], [], []
     veritas_preds, veritas_confs, veritas_lats = [], [], []
     ground_truths = [c["ground_truth"] for c in test_set]
 
     for item in test_set:
         claim = item["claim"]
         gt = item["ground_truth"]
+        evidence = item.get("evidence")
         print(f"Evaluating [{item['id']}]: \"{claim[:55]}...\" | Truth: {gt}")
 
         # 1. Single LLM
@@ -230,8 +233,15 @@ def run_benchmark(sample_size: int = 6, dataset_path: str = None) -> Dict[str, A
         base_confs.append(b_res.aggregate_confidence)
         base_lats.append(b_res.execution_time_seconds)
 
-        # 3. VERITAS AI
-        v_res = run_audit(claim, mode="veritas", max_rounds=3)
+        # 3. FC-MAD
+        f_res = run_audit(claim, mode="fcmad", max_rounds=config.max_rounds_fcmad, evidence=evidence)
+        f_v = f_res.aggregate_verdict.value if hasattr(f_res.aggregate_verdict, "value") else str(f_res.aggregate_verdict)
+        fcmad_preds.append(f_v)
+        fcmad_confs.append(f_res.aggregate_confidence)
+        fcmad_lats.append(f_res.execution_time_seconds)
+
+        # 4. VERITAS AI
+        v_res = run_audit(claim, mode="veritas", max_rounds=3, evidence=evidence)
         v_v = v_res.aggregate_verdict.value if hasattr(v_res.aggregate_verdict, "value") else str(v_res.aggregate_verdict)
         veritas_preds.append(v_v)
         veritas_confs.append(v_res.aggregate_confidence)
@@ -239,20 +249,21 @@ def run_benchmark(sample_size: int = 6, dataset_path: str = None) -> Dict[str, A
 
     s_metrics = compute_metrics(single_preds, ground_truths, single_confs, single_lats)
     b_metrics = compute_metrics(base_preds, ground_truths, base_confs, base_lats)
+    f_metrics = compute_metrics(fcmad_preds, ground_truths, fcmad_confs, fcmad_lats)
     v_metrics = compute_metrics(veritas_preds, ground_truths, veritas_confs, veritas_lats)
 
     print("\n\n=== BENCHMARK COMPARISON TABLE ===")
-    print(f"| Metric                   | Single LLM | ClaimAuditor Baseline | VERITAS AI |")
-    print(f"|--------------------------|------------|-----------------------|------------|")
-    print(f"| Accuracy                 | {s_metrics['accuracy']:.1%}      | {b_metrics['accuracy']:.1%}                 | {v_metrics['accuracy']:.1%}      |")
-    print(f"| Macro F1                 | {s_metrics['macro_f1']:.3f}      | {b_metrics['macro_f1']:.3f}                 | {v_metrics['macro_f1']:.3f}      |")
-    print(f"| Expected Calib Error     | {s_metrics['ece']:.3f}      | {b_metrics['ece']:.3f}                 | {v_metrics['ece']:.3f}      |")
-    print(f"| Avg Latency              | {s_metrics['avg_latency_sec']}s       | {b_metrics['avg_latency_sec']}s                 | {v_metrics['avg_latency_sec']}s       |")
-    print(f"| % NOT_ENOUGH_INFO        | {s_metrics['pct_not_enough_info']}%       | {b_metrics['pct_not_enough_info']}%                 | {v_metrics['pct_not_enough_info']}%      |")
-    print(f"| Failed Items             | {s_metrics.get('failed_count', 0)}          | {b_metrics.get('failed_count', 0)}                     | {v_metrics.get('failed_count', 0)}          |")
-    print(f"| Mathematical Consensus   | No         | No                    | DeGroot    |")
-    print(f"| Socratic Epistemic Probe | No         | No                    | Yes        |")
-    print(f"| Source Credibility Model | No         | No                    | 6-Tier     |")
+    print(f"| Metric                   | Single LLM | ClaimAuditor Baseline | FC-MAD       | VERITAS AI |")
+    print(f"|--------------------------|------------|-----------------------|--------------|------------|")
+    print(f"| Accuracy                 | {s_metrics['accuracy']:.1%}      | {b_metrics['accuracy']:.1%}                 | {f_metrics['accuracy']:.1%}        | {v_metrics['accuracy']:.1%}      |")
+    print(f"| Macro F1                 | {s_metrics['macro_f1']:.3f}      | {b_metrics['macro_f1']:.3f}                 | {f_metrics['macro_f1']:.3f}        | {v_metrics['macro_f1']:.3f}      |")
+    print(f"| Expected Calib Error     | {s_metrics['ece']:.3f}      | {b_metrics['ece']:.3f}                 | {f_metrics['ece']:.3f}        | {v_metrics['ece']:.3f}      |")
+    print(f"| Avg Latency              | {s_metrics['avg_latency_sec']}s       | {b_metrics['avg_latency_sec']}s                 | {f_metrics['avg_latency_sec']}s         | {v_metrics['avg_latency_sec']}s       |")
+    print(f"| % NOT_ENOUGH_INFO        | {s_metrics['pct_not_enough_info']}%       | {b_metrics['pct_not_enough_info']}%                 | {f_metrics['pct_not_enough_info']}%        | {v_metrics['pct_not_enough_info']}%      |")
+    print(f"| Failed Items             | {s_metrics.get('failed_count', 0)}          | {b_metrics.get('failed_count', 0)}                     | {f_metrics.get('failed_count', 0)}            | {v_metrics.get('failed_count', 0)}          |")
+    print(f"| Mathematical Consensus   | No         | No                    | DeGroot TV   | DeGroot    |")
+    print(f"| Socratic Epistemic Probe | No         | No                    | Summary      | Yes        |")
+    print(f"| Source Credibility Model | No         | No                    | Judge Q-Score| 6-Tier     |")
 
     print("\n=== VERITAS AI CONFUSION MATRIX ===")
     header_col = "Actual \\ Predicted"
@@ -264,6 +275,7 @@ def run_benchmark(sample_size: int = 6, dataset_path: str = None) -> Dict[str, A
     return {
         "single_llm": s_metrics,
         "baseline": b_metrics,
+        "fcmad": f_metrics,
         "veritas_ai": v_metrics,
     }
 

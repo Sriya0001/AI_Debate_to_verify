@@ -6,9 +6,10 @@ from models.verdict import VerdictType
 class AuditRequest(BaseModel):
     text: str = Field(..., description="The factual claim or text passage to audit")
     source_label: Optional[str] = Field(None, description="e.g. 'GPT-4o response', 'News article'")
-    mode: str = Field("veritas", description="'veritas' or 'baseline'")
-    max_rounds: int = Field(3, ge=1, le=5)
-    max_research_rounds: int = Field(2, ge=1, le=3)
+    mode: str = Field("veritas", description="'veritas', 'fcmad', or 'baseline'")
+    max_rounds: Optional[int] = Field(None, ge=1, le=10, description="Max debate rounds (defaults to mode config)")
+    max_research_rounds: int = Field(2, ge=1, le=5)
+    evidence: Optional[List[Dict[str, Any]]] = Field(None, description="Optional provided evidence (skips search)")
 
 
 class ClaimVerdictResponse(BaseModel):
@@ -22,6 +23,10 @@ class ClaimVerdictResponse(BaseModel):
     why_not_other_verdicts: Optional[str] = None
     debate_rounds: int
     consensus_iterations: int
+    final_distribution: Optional[List[float]] = None
+    raw_confidence: Optional[float] = None
+    calibrated_confidence: Optional[float] = None
+    abstain: bool = False
 
 
 class AuditResponse(BaseModel):
@@ -35,6 +40,10 @@ class AuditResponse(BaseModel):
     execution_time_seconds: float
     total_searches: int
     total_llm_calls: int
+    final_distribution: Optional[List[float]] = None
+    raw_confidence: Optional[float] = None
+    calibrated_confidence: Optional[float] = None
+    abstain: bool = False
 
 
 class SessionSummary(BaseModel):
