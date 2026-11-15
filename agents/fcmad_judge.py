@@ -83,6 +83,21 @@ def fcmad_judge_node(state: VeritasState) -> Dict[str, Any]:
         else:
             beliefs_list.append([1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0])
 
+    # Ablation: FC-MAD without Judge / Credibility (Equal Weights)
+    if state.get("fcmad_equal_weights") or getattr(config, "fcmad_equal_weights", False):
+        num_d = max(1, len(debater_names))
+        eq_cred = [float(round(1.0 / num_d, 4)) for _ in range(num_d)]
+        log_msg = format_audit_log(
+            "Judge (FC-MAD Ablation: Equal Weights)",
+            f"Bypassed Judge quality scores; assigned uniform credibilities c_i={1.0 / num_d:.3f} across {num_d} debaters."
+        )
+        return {
+            "credibilities": eq_cred,
+            "fcmad_quality_scores": {name: 1.0 for name in debater_names},
+            "audit_trail": [log_msg],
+            "error": None,
+        }
+
     arguments_text = "\n".join(
         f"- {name.upper()}: Cited={latest_by_debater[name].cited_evidence_ids if name in latest_by_debater else []}\n"
         f"  Argument: {latest_by_debater[name].reasoning if name in latest_by_debater else 'No argument'}"

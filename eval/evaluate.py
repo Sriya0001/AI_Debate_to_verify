@@ -282,8 +282,50 @@ def run_benchmark(sample_size: int = 6, dataset_path: str = None) -> Dict[str, A
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="VERITAS AI Benchmark Runner")
-    parser.add_argument("--size", type=int, default=6, help="Number of claims to evaluate (default: 6)")
-    parser.add_argument("--dataset", type=str, default=None, help="Path to custom JSON/CSV dataset")
+    from eval.harness import EvaluationHarness
+    from eval.loaders import load_smoke_test, load_fever_dataset, load_xfact_dataset
+
+    parser = argparse.ArgumentParser(description="VERITAS AI & FC-MAD Scientific Evaluation Harness")
+    parser.add_argument("--mode", type=str, default="smoke", choices=["smoke", "fever", "xfact", "custom"], help="Dataset mode (smoke, fever, xfact, custom)")
+    parser.add_argument("--dataset", type=str, default=None, help="Path to FEVER / X-Fact / custom JSONL/CSV file")
+    parser.add_argument("--size", type=int, default=None, help="Number of claims to evaluate")
+    parser.add_argument("--conditions", type=str, default=None, help="Comma-separated conditions (cot,sc,veritas,fcmad,fcmad_no_judge,fcmad_no_degroot,fcmad_no_summarizer)")
+    parser.add_argument("--seeds", type=str, default="42,43,44", help="Comma-separated random seeds (default: 42,43,44)")
+    parser.add_argument("--target-accuracy", type=float, default=0.90, help="Target accuracy for abstain threshold tau (default: 0.90)")
+    parser.add_argument("--output-dir", type=str, default="eval_results", help="Directory to save JSON and Markdown results")
+    parser.add_argument("--dry-run", action="store_true", help="Force Mock-LLM dry-run mode")
+    parser.add_argument("--legacy", action="store_true", help="Run legacy 4-column quick comparison")
     args = parser.parse_args()
-    run_benchmark(sample_size=args.size, dataset_path=args.dataset)
+
+    if args.legacy:
+        sample_s = args.size if args.size is not None else 6
+        run_benchmark(sample_size=sample_s, dataset_path=args.dataset)
+    else:
+        # Load dataset
+        if args.mode == "smoke":
+            dataset = load_smoke_test(limit=args.size)
+        elif args.mode == "fever":
+            f_path = args.dataset or config.fever_dataset_path
+            dataset = load_fever_dataset(f_path, max_samples=args.size, seed=42)
+        elif args.mode == "xfact":
+            x_path = args.dataset or config.xfact_dataset_path
+            dataset = load_xfact_dataset(x_path, max_samples=args.size, seed=42)
+        else:
+            dataset = load_benchmark_dataset(args.dataset)
+            if args.size:
+                dataset = dataset[:args.size]
+
+        conds = [c.strip() for c in args.conditions.split(",")] if args.conditions else None
+        seeds_list = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
+
+        harness = EvaluationHarness(
+            output_dir=args.output_dir,
+            dry_run=args.dry_run,
+        )
+        harness.run_benchmark(
+            dataset=dataset,
+            conditions=conds,
+            seeds=seeds_list,
+            target_accuracy=args.target_accuracy,
+            run_name=f"{args.mode}_eval",
+        )

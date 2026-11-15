@@ -20,6 +20,7 @@ def run_audit(
     max_rounds: Optional[int] = None,
     max_research_rounds: int = 2,
     evidence: Optional[List[Any]] = None,
+    ablation: Optional[str] = None,
 ) -> AuditSessionResult:
     """
     Executes a fact verification session under VERITAS mode, FCMAD mode, or Baseline mode.
@@ -28,9 +29,11 @@ def run_audit(
         text: Claim or paragraph text to audit.
         source_label: Optional label denoting source (e.g. 'GPT-4o response').
         mode: 'veritas' (10-agent consensus), 'fcmad' (FC-MAD DeGroot consensus), or 'baseline' (5-agent ClaimAuditor).
+              Also supports ablation modes: 'fcmad_no_judge', 'fcmad_no_degroot', 'fcmad_no_summarizer'.
         max_rounds: Max debate rounds.
         max_research_rounds: Max research iteration loops.
         evidence: Optional provided evidence (e.g. gold evidence from benchmark datasets) to skip external search.
+        ablation: Optional ablation specifier ('no_judge', 'no_degroot', 'no_summarizer').
 
     Returns:
         Structured AuditSessionResult with claims, verdicts, consensus distributions, metrics, and audit trail.
@@ -46,9 +49,13 @@ def run_audit(
         repository.save_session(result)
         return result
 
-    # Mode 2: VERITAS or FC-MAD Mode
-    pipe_mode = mode.lower()
-    if pipe_mode == "fcmad":
+    # Mode 2: VERITAS or FC-MAD Mode (including ablations)
+    mode_lower = mode.lower()
+    effective_ablation = ablation
+    if mode_lower.startswith("fcmad"):
+        pipe_mode = "fcmad"
+        if "_" in mode_lower:
+            effective_ablation = mode_lower.replace("fcmad_", "")
         effective_max_rounds = max_rounds if max_rounds is not None else config.max_rounds_fcmad
     else:
         pipe_mode = "veritas"
@@ -61,6 +68,7 @@ def run_audit(
         max_rounds=effective_max_rounds,
         max_research_rounds=max_research_rounds,
         provided_evidence=evidence,
+        ablation=effective_ablation,
     )
 
     final_state: VeritasState = veritas_graph.invoke(state)

@@ -6,6 +6,7 @@ from typing import Any, List, Optional
 from langchain_core.messages import BaseMessage, AIMessage
 from config import config
 from utils.metrics import metrics
+from utils.cache import llm_cache
 
 
 class MockLLM:
@@ -19,9 +20,18 @@ class MockLLM:
         self.temperature = temperature
 
     def invoke(self, messages: List[BaseMessage]) -> AIMessage:
-        prompt_text = " ".join([m.content for m in messages if isinstance(m.content, str)])
+        prompt_text = " ".join([str(m.content) for m in messages if hasattr(m, "content")])
         response_content = self._generate_response(prompt_text)
-        return AIMessage(content=response_content)
+        p_tok = max(10, int(len(prompt_text.split()) * 1.3))
+        c_tok = max(5, int(len(response_content.split()) * 1.3))
+        return AIMessage(
+            content=response_content,
+            usage_metadata={
+                "input_tokens": p_tok,
+                "output_tokens": c_tok,
+                "total_tokens": p_tok + c_tok,
+            }
+        )
 
     def _generate_response(self, text: str) -> str:
         lower = text.lower()
@@ -444,24 +454,155 @@ class MockLLM:
         if "output agent in the fc-mad" in lower or "narrative explanation justifying this verdict" in lower:
             return "The consensus deliberation concluded with a clear verdict based on the corroborating evidence retrieved and debater consensus across rounds."
 
+        # 16. Single-Agent Chain-of-Thought (CoT) & Self-Consistency
+        if "chain-of-thought" in lower or "reason step-by-step" in lower or "fact-checking assistant" in lower or ("probabilities" in lower and "authoritative verdict" in lower):
+            claim_portion = lower
+            if "target claim:" in lower:
+                claim_portion = lower.split("target claim:")[1].split("\n\n")[0]
+
+            if any(k in claim_portion for k in ["green cheese", "10 percent", "failed math", "border boundary", "secretly built", "dispute", "falsehood"]):
+                return json.dumps({
+                    "reasoning": "Step-by-step evidentiary analysis refutes the factual assertion based on counter-evidence.",
+                    "verdict": "REFUTED",
+                    "confidence": 0.86,
+                    "probabilities": {"supported": 0.08, "refuted": 0.86, "unknown": 0.06}
+                })
+            elif any(k in claim_portion for k in ["sentient", "secret tunnel", "alien", "unverifiable", "insufficient"]):
+                return json.dumps({
+                    "reasoning": "Step-by-step analysis reveals insufficient empirical evidence to substantiate or disprove the claim.",
+                    "verdict": "NOT_ENOUGH_INFORMATION",
+                    "confidence": 0.75,
+                    "probabilities": {"supported": 0.15, "refuted": 0.10, "unknown": 0.75}
+                })
+            else:
+                return json.dumps({
+                    "reasoning": "Step-by-step analysis confirms the factual assertions are fully corroborated by the provided evidence.",
+                    "verdict": "SUPPORTED",
+                    "confidence": 0.88,
+                    "probabilities": {"supported": 0.88, "refuted": 0.06, "unknown": 0.06}
+                })
+
         # Default fallback
         return json.dumps({"status": "ok", "message": "Default mock response."})
 
 
-def get_llm(agent_name: str, model_name: Optional[str] = None, temperature: float = 0.0) -> Any:
+class CachedLLMWrapper:
+    """
+    Transparent caching and telemetry wrapper around LangChain chat models and MockLLM.
+    Caches responses by (model_name, prompt_text, seed, temperature).
+    """
+    def __init__(self, inner_llm: Any, model_name: str, temperature: float = 0.0, seed: Optional[int] = None):
+        self.inner_llm = inner_llm
+        self.model_name = model_name
+        self.temperature = float(temperature)
+        self.seed = seed
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.inner_llm, name)
+
+    def invoke(self, messages: List[BaseMessage], **kwargs) -> AIMessage:
+        prompt_text = " ".join([str(getattr(m, "content", "")) for m in messages])
+
+        # 1. Check persistent cache
+        if getattr(config, "llm_cache_enabled", True):
+            cached = llm_cache.get(
+                model_name=self.model_name,
+                prompt_text=prompt_text,
+                seed=self.seed,
+                temperature=self.temperature,
+            )
+            if cached:
+                p_tok = cached.get("prompt_tokens", 0)
+                c_tok = cached.get("completion_tokens", 0)
+                metrics.record_llm_call(
+                    agent_name=self.model_name,
+                    latency=0.001,
+                    prompt_tokens=p_tok,
+                    completion_tokens=c_tok,
+                )
+                return AIMessage(
+                    content=cached["response_text"],
+                    usage_metadata={
+                        "input_tokens": p_tok,
+                        "output_tokens": c_tok,
+                        "total_tokens": p_tok + c_tok,
+                    }
+                )
+
+        # 2. Invoke underlying model
+        t0 = time.time()
+        resp = self.inner_llm.invoke(messages, **kwargs)
+        latency = max(0.001, time.time() - t0)
+
+        # 3. Extract or estimate token usage
+        p_tokens = 0
+        c_tokens = 0
+        if hasattr(resp, "usage_metadata") and resp.usage_metadata:
+            p_tokens = resp.usage_metadata.get("input_tokens", 0)
+            c_tokens = resp.usage_metadata.get("output_tokens", 0)
+        elif hasattr(resp, "response_metadata") and resp.response_metadata:
+            usage = resp.response_metadata.get("usage", {})
+            p_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+            c_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+
+        if p_tokens == 0:
+            p_tokens = max(10, int(len(prompt_text.split()) * 1.3))
+        if c_tokens == 0:
+            c_tokens = max(5, int(len(str(getattr(resp, "content", "")).split()) * 1.3))
+
+        # Record metrics
+        metrics.record_llm_call(
+            agent_name=self.model_name,
+            latency=latency,
+            prompt_tokens=p_tokens,
+            completion_tokens=c_tokens,
+        )
+
+        # Store in cache
+        if getattr(config, "llm_cache_enabled", True):
+            llm_cache.set(
+                model_name=self.model_name,
+                prompt_text=prompt_text,
+                response_text=str(getattr(resp, "content", "")),
+                seed=self.seed,
+                temperature=self.temperature,
+                prompt_tokens=p_tokens,
+                completion_tokens=c_tokens,
+                latency=latency,
+            )
+
+        if not hasattr(resp, "usage_metadata") or not resp.usage_metadata:
+            resp.usage_metadata = {
+                "input_tokens": p_tokens,
+                "output_tokens": c_tokens,
+                "total_tokens": p_tokens + c_tokens,
+            }
+
+        return resp
+
+
+def get_llm(
+    agent_name: str,
+    model_name: Optional[str] = None,
+    temperature: float = 0.0,
+    seed: Optional[int] = None,
+) -> Any:
     """
     Factory returning an LLM instance conforming to LangChain's Runnable interface.
     Dynamically switches between Anthropic, OpenAI, and Mock LLM based on configuration.
+    Wraps the instance with CachedLLMWrapper for transparent caching and cost telemetry.
     """
     provider = config.llm_provider.lower()
-    t_start = time.time()
+
+    raw_llm = None
+    chosen_model = model_name
 
     # 1. Anthropic Provider
     if provider == "anthropic" and config.anthropic_api_key:
         try:
             from langchain_anthropic import ChatAnthropic
             chosen_model = model_name or getattr(config, f"{agent_name}_model", "claude-haiku-4-5-20251001")
-            return ChatAnthropic(
+            raw_llm = ChatAnthropic(
                 model=chosen_model,
                 api_key=config.anthropic_api_key,
                 temperature=temperature,
@@ -470,11 +611,11 @@ def get_llm(agent_name: str, model_name: Optional[str] = None, temperature: floa
             pass
 
     # 2. OpenAI Provider
-    if provider == "openai" and config.openai_api_key:
+    if raw_llm is None and provider == "openai" and config.openai_api_key:
         try:
             from langchain_openai import ChatOpenAI
             chosen_model = model_name or "gpt-4o-mini"
-            return ChatOpenAI(
+            raw_llm = ChatOpenAI(
                 model=chosen_model,
                 api_key=config.openai_api_key,
                 temperature=temperature,
@@ -483,5 +624,13 @@ def get_llm(agent_name: str, model_name: Optional[str] = None, temperature: floa
             pass
 
     # 3. Default / Offline Mock Provider
-    chosen_model = model_name or "veritas-mock-engine"
-    return MockLLM(model_name=chosen_model, temperature=temperature)
+    if raw_llm is None:
+        chosen_model = model_name or "veritas-mock-engine"
+        raw_llm = MockLLM(model_name=chosen_model, temperature=temperature)
+
+    return CachedLLMWrapper(
+        inner_llm=raw_llm,
+        model_name=chosen_model,
+        temperature=temperature,
+        seed=seed,
+    )

@@ -143,8 +143,9 @@ def fcmad_degroot_node(state: VeritasState) -> Dict[str, Any]:
     else:
         cred_arr = np.array(cred_list, dtype=float)
 
-    # Perform DeGroot update
-    updated_matrix = degroot_update(beliefs_list, cred_arr, alpha=config.alpha)
+    # Perform DeGroot update (alpha=1.0 under ablation: fcmad_no_degroot)
+    effective_alpha = 1.0 if (state.get("fcmad_no_degroot") or getattr(config, "fcmad_no_degroot", False)) else config.alpha
+    updated_matrix = degroot_update(beliefs_list, cred_arr, alpha=effective_alpha)
 
     # Update belief_vectors
     new_belief_dict: Dict[str, BeliefVector] = {}

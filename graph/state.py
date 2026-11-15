@@ -7,6 +7,7 @@ from models.evidence import ResearchTask, EvidenceItem, SourceScore
 from models.agents import BeliefVector, AgentPosition, SocraticChallenge, JudgeEvaluation
 from models.consensus import ConsensusResult
 from models.verdict import VerdictType, FinalVerdict
+from config import config
 
 
 def merge_dicts(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
@@ -77,6 +78,10 @@ class VeritasState(TypedDict):
     fcmad_debate_summary: Optional[str]
     fcmad_quality_scores: Dict[str, float]
     provided_evidence: Optional[List[EvidenceItem]]
+    ablation: Optional[str]
+    fcmad_equal_weights: bool
+    fcmad_no_degroot: bool
+    fcmad_no_summarizer: bool
 
     # ── Final Verdict & Audit Trail ─────────────────────────────────────────
     final_verdicts: List[FinalVerdict]
@@ -94,10 +99,11 @@ def initial_veritas_state(
     max_rounds: int = 3,
     max_research_rounds: int = 2,
     provided_evidence: Optional[List[Any]] = None,
+    ablation: Optional[str] = None,
 ) -> VeritasState:
     """
     Constructs a pristine starting state for a VERITAS verification session.
-    Supports "veritas", "baseline", and "fcmad" pipeline modes.
+    Supports "veritas", "baseline", and "fcmad" pipeline modes, with optional FC-MAD ablations.
     """
     evidence_items: List[EvidenceItem] = []
     if provided_evidence:
@@ -117,6 +123,12 @@ def initial_veritas_state(
                     relevance_score=float(item.get("relevance_score", 1.0)),
                 )
                 evidence_items.append(ev)
+
+    # Resolve ablation flags
+    abl = (ablation or "").lower()
+    equal_w = getattr(config, "fcmad_equal_weights", False) or abl in ("no_judge", "equal_weights", "no_credibility")
+    no_degroot = getattr(config, "fcmad_no_degroot", False) or abl in ("no_degroot", "alpha_1")
+    no_summ = getattr(config, "fcmad_no_summarizer", False) or abl in ("no_summarizer", "no_summary")
 
     return VeritasState(
         input_text=input_text,
@@ -155,6 +167,10 @@ def initial_veritas_state(
         fcmad_debate_summary=None,
         fcmad_quality_scores={},
         provided_evidence=evidence_items if evidence_items else None,
+        ablation=ablation,
+        fcmad_equal_weights=equal_w,
+        fcmad_no_degroot=no_degroot,
+        fcmad_no_summarizer=no_summ,
         final_verdicts=[],
         aggregate_verdict=None,
         aggregate_confidence=None,

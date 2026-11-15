@@ -39,6 +39,19 @@ def fcmad_summarizer_node(state: VeritasState) -> Dict[str, Any]:
 
     claim_id = current_claim.claim_id
     current_round = state.get("current_round", 0)
+
+    # Ablation: FC-MAD without Summarizer
+    if state.get("fcmad_no_summarizer") or getattr(config, "fcmad_no_summarizer", False):
+        log_msg = format_audit_log(
+            "Summarizer (FC-MAD Ablation: No Summarizer)",
+            "Skipped debate synthesis; revision round debaters reason directly from evidence."
+        )
+        return {
+            "fcmad_debate_summary": "",
+            "audit_trail": [log_msg],
+            "error": None,
+        }
+
     evidence_text = evidence_pool.format_pool_for_prompt(claim_id)
 
     # Gather debater positions from the latest round

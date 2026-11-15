@@ -109,6 +109,50 @@ class Config:
         default_factory=lambda: int(os.environ.get("FCMAD_SUMMARIZER_TOKEN_CAP", "300"))
     )
 
+    # ── FC-MAD Ablation Toggles (docs/FCMAD_MATH.md Section 10) ─────────────
+    fcmad_equal_weights: bool = field(
+        default_factory=lambda: os.environ.get("FCMAD_EQUAL_WEIGHTS", "false").lower() in ("true", "1", "yes")
+    )
+    fcmad_no_degroot: bool = field(
+        default_factory=lambda: os.environ.get("FCMAD_NO_DEGROOT", "false").lower() in ("true", "1", "yes")
+    )
+    fcmad_no_summarizer: bool = field(
+        default_factory=lambda: os.environ.get("FCMAD_NO_SUMMARIZER", "false").lower() in ("true", "1", "yes")
+    )
+
+    # ── Calibration & Evaluation Harness Settings ───────────────────────────
+    calibration_params_path: str = field(
+        default_factory=lambda: os.environ.get("CALIBRATION_PARAMS_PATH", "eval/calibration_params.json")
+    )
+    eval_backbone_model: str = field(
+        default_factory=lambda: os.environ.get("EVAL_BACKBONE_MODEL", "claude-haiku-4-5-20251001")
+    )
+    eval_seeds: list = field(
+        default_factory=lambda: [42, 43, 44]
+    )
+    fever_dataset_path: str = field(
+        default_factory=lambda: os.environ.get("FEVER_DATASET_PATH", "data/fever_dev.jsonl")
+    )
+    xfact_dataset_path: str = field(
+        default_factory=lambda: os.environ.get("XFACT_DATASET_PATH", "data/xfact.jsonl")
+    )
+
+    # Pricing per 1M tokens for telemetry and cost tracking ($ USD)
+    prompt_cost_per_million: float = field(
+        default_factory=lambda: float(os.environ.get("PROMPT_COST_PER_MILLION", "1.0"))
+    )
+    completion_cost_per_million: float = field(
+        default_factory=lambda: float(os.environ.get("COMPLETION_COST_PER_MILLION", "3.0"))
+    )
+
+    # ── LLM Response Cache Settings ─────────────────────────────────────────
+    llm_cache_enabled: bool = field(
+        default_factory=lambda: os.environ.get("LLM_CACHE_ENABLED", "true").lower() in ("true", "1", "yes")
+    )
+    llm_cache_path: str = field(
+        default_factory=lambda: os.environ.get("LLM_CACHE_PATH", ".cache/llm_cache.sqlite")
+    )
+
     @property
     def calibration_on(self) -> bool:
         """Alias for calibration_enabled."""
