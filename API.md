@@ -1,6 +1,6 @@
-# VERITAS AI — REST API Documentation
+# FC-MAD — REST API Documentation
 
-The VERITAS AI API server is implemented with **FastAPI** and provides high-performance endpoints for claim verification, asynchronous task monitoring, persistent audit inspection, evidence exploration, and consensus telemetry.
+The FC-MAD API server is implemented with **FastAPI** and provides high-performance endpoints for claim verification, asynchronous task monitoring, persistent audit inspection, evidence exploration, and consensus telemetry.
 
 - **Base URL**: `http://localhost:8000`
 - **Interactive OpenAPI Documentation**: `http://localhost:8000/docs`
@@ -30,7 +30,7 @@ The VERITAS AI API server is implemented with **FastAPI** and provides high-perf
 ```json
 {
   "status": "ok",
-  "system": "VERITAS AI",
+  "system": "FC-MAD",
   "version": "2.0.0",
   "description": "Autonomous Multi-Agent Fact Verification Platform"
 }

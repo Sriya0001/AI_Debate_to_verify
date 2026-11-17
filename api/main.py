@@ -7,7 +7,7 @@ from runner import run_audit
 from database.repository import repository
 
 app = FastAPI(
-    title="VERITAS AI — Autonomous Multi-Agent Claim Verification",
+    title="FC-MAD — Autonomous Multi-Agent Claim Verification",
     description="Multi-agent debate, source credibility scoring, and DeGroot consensus system for factual claim verification.",
     version="2.0.0",
 )
@@ -25,7 +25,7 @@ app.add_middleware(
 def health() -> Dict[str, str]:
     return {
         "status": "ok",
-        "system": "VERITAS AI",
+        "system": "FC-MAD",
         "version": "2.0.0",
         "description": "Autonomous Multi-Agent Fact Verification Platform",
     }
