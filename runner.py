@@ -1,3 +1,10 @@
+import sys
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import uuid
 import time
 from typing import Optional, Dict, Any, List, Union
@@ -16,24 +23,26 @@ from utils.audit_trail import audit_trail
 def run_audit(
     text: str,
     source_label: Optional[str] = None,
-    mode: str = "veritas",
+    mode: str = "fcmad",
     max_rounds: Optional[int] = None,
     max_research_rounds: int = 2,
     evidence: Optional[List[Any]] = None,
     ablation: Optional[str] = None,
+    debater_models: Optional[List[str]] = None,
 ) -> AuditSessionResult:
     """
-    Executes a fact verification session under VERITAS mode, FCMAD mode, or Baseline mode.
+    Executes a fact verification session under the unified FC-MAD DeGroot consensus architecture.
 
     Args:
         text: Claim or paragraph text to audit.
         source_label: Optional label denoting source (e.g. 'GPT-4o response').
-        mode: 'veritas' (10-agent consensus), 'fcmad' (FC-MAD DeGroot consensus), or 'baseline' (5-agent ClaimAuditor).
+        mode: 'fcmad' (FC-MAD DeGroot consensus) or 'baseline' (5-agent ClaimAuditor).
               Also supports ablation modes: 'fcmad_no_judge', 'fcmad_no_degroot', 'fcmad_no_summarizer'.
         max_rounds: Max debate rounds.
         max_research_rounds: Max research iteration loops.
         evidence: Optional provided evidence (e.g. gold evidence from benchmark datasets) to skip external search.
         ablation: Optional ablation specifier ('no_judge', 'no_degroot', 'no_summarizer').
+        debater_models: Optional list of heterogeneous model names to assign to debaters.
 
     Returns:
         Structured AuditSessionResult with claims, verdicts, consensus distributions, metrics, and audit trail.
@@ -42,33 +51,30 @@ def run_audit(
     start_time = time.time()
     session_id = str(uuid.uuid4())[:8]
 
-    # Mode 1: Baseline Mode
+    # Mode 1: Baseline Mode (for comparative benchmarking)
     if mode.lower() == "baseline":
         rounds = max_rounds if max_rounds is not None else 2
         result = run_baseline_audit(text, source_label, rounds)
         repository.save_session(result)
         return result
 
-    # Mode 2: VERITAS or FC-MAD Mode (including ablations)
+    # Mode 2: Unified FC-MAD Architecture (including ablations)
     mode_lower = mode.lower()
     effective_ablation = ablation
-    if mode_lower.startswith("fcmad"):
-        pipe_mode = "fcmad"
-        if "_" in mode_lower:
-            effective_ablation = mode_lower.replace("fcmad_", "")
-        effective_max_rounds = max_rounds if max_rounds is not None else config.max_rounds_fcmad
-    else:
-        pipe_mode = "veritas"
-        effective_max_rounds = max_rounds if max_rounds is not None else config.max_debate_rounds
+    if "_" in mode_lower and mode_lower.startswith("fcmad_"):
+        effective_ablation = mode_lower.replace("fcmad_", "")
+
+    effective_max_rounds = max_rounds if max_rounds is not None else config.max_rounds_fcmad
 
     state = initial_veritas_state(
         input_text=text,
         source_label=source_label,
-        pipeline_mode=pipe_mode,
+        pipeline_mode="fcmad",
         max_rounds=effective_max_rounds,
         max_research_rounds=max_research_rounds,
         provided_evidence=evidence,
         ablation=effective_ablation,
+        debater_models=debater_models,
     )
 
     final_state: VeritasState = veritas_graph.invoke(state)
@@ -118,7 +124,7 @@ if __name__ == "__main__":
     import sys
     sample_text = sys.argv[1] if len(sys.argv) > 1 else "The Eiffel Tower is 330 meters tall and was completed in 1889."
     print(f"\n=======================================================")
-    print(f"  VERITAS AI — AUDITING CLAIM")
+    print(f"  FC-MAD MULTI-AGENT DEBATE ENGINE — AUDITING CLAIM")
     print(f"  \"{sample_text}\"")
     print(f"=======================================================\n")
     res = run_audit(sample_text)

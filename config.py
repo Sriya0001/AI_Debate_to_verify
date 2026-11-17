@@ -50,6 +50,31 @@ class Config:
     debater_model: str = field(
         default_factory=lambda: os.environ.get("DEBATER_MODEL", "claude-haiku-4-5-20251001")
     )
+    # Heterogeneous Multi-Model Debater Assignments (Cross-Model Super-Debate)
+    # Debater 0: OpenAI GPT-OSS 120B (Deep reasoner)
+    # Debater 1: Alibaba Qwen 27B (Fast sharp skeptic)
+    # Debater 2: OpenAI GPT-OSS 20B (Independent critic)
+    debater_0_model: str = field(
+        default_factory=lambda: os.environ.get("DEBATER_0_MODEL", "openai/gpt-oss-120b")
+    )
+    debater_1_model: str = field(
+        default_factory=lambda: os.environ.get("DEBATER_1_MODEL", "qwen/qwen3.8-27b")
+    )
+    debater_2_model: str = field(
+        default_factory=lambda: os.environ.get("DEBATER_2_MODEL", "openai/gpt-oss-20b")
+    )
+    debater_models: list = field(
+        default_factory=lambda: [
+            m.strip() for m in os.environ.get(
+                "DEBATER_MODELS",
+                f"{os.environ.get('DEBATER_0_MODEL', 'openai/gpt-oss-120b')},"
+                f"{os.environ.get('DEBATER_1_MODEL', 'qwen/qwen3.8-27b')},"
+                f"{os.environ.get('DEBATER_2_MODEL', 'openai/gpt-oss-20b')}"
+                if os.environ.get("LLM_PROVIDER", "groq").lower() == "groq"
+                else "claude-haiku-4-5-20251001,claude-haiku-4-5-20251001,claude-haiku-4-5-20251001"
+            ).split(",") if m.strip()
+        ]
+    )
     summarizer_model: str = field(
         default_factory=lambda: os.environ.get("SUMMARIZER_MODEL", "claude-haiku-4-5-20251001")
     )

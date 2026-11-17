@@ -36,8 +36,12 @@ def fcmad_debaters_round0_node(state: VeritasState) -> Dict[str, Any]:
     audit_entries: List[str] = []
     recorded_failures: List[Dict[str, Any]] = list(state.get("recorded_failures", []))
 
-    # Execute debaters concurrently
-    debater_fns = [create_debater_node(i) for i in range(num_d)]
+    # Execute debaters concurrently (with heterogeneous multi-model overrides)
+    models_list = state.get("debater_models") or getattr(config, "debater_models", [])
+    debater_fns = [
+        create_debater_node(i, model_override=models_list[i] if i < len(models_list) else None)
+        for i in range(num_d)
+    ]
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_d) as executor:
         futures = [executor.submit(fn, state) for fn in debater_fns]
         for f in concurrent.futures.as_completed(futures):
@@ -95,7 +99,11 @@ def fcmad_debaters_revise_node(state: VeritasState) -> Dict[str, Any]:
     audit_entries: List[str] = []
     recorded_failures: List[Dict[str, Any]] = list(state.get("recorded_failures", []))
 
-    debater_fns = [create_debater_node(i) for i in range(num_d)]
+    models_list = state.get("debater_models") or getattr(config, "debater_models", [])
+    debater_fns = [
+        create_debater_node(i, model_override=models_list[i] if i < len(models_list) else None)
+        for i in range(num_d)
+    ]
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_d) as executor:
         futures = [executor.submit(fn, state) for fn in debater_fns]
         for f in concurrent.futures.as_completed(futures):

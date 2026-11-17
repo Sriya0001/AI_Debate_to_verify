@@ -6,7 +6,7 @@ from models.verdict import VerdictType
 class AuditRequest(BaseModel):
     text: str = Field(..., description="The factual claim or text passage to audit")
     source_label: Optional[str] = Field(None, description="e.g. 'GPT-4o response', 'News article'")
-    mode: str = Field("veritas", description="'veritas', 'fcmad', or 'baseline'")
+    mode: str = Field("fcmad", description="'fcmad' (FC-MAD DeGroot consensus) or 'baseline'")
     max_rounds: Optional[int] = Field(None, ge=1, le=10, description="Max debate rounds (defaults to mode config)")
     max_research_rounds: int = Field(2, ge=1, le=5)
     evidence: Optional[List[Dict[str, Any]]] = Field(None, description="Optional provided evidence (skips search)")

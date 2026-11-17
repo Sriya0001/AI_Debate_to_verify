@@ -86,7 +86,9 @@ Re-reason from the claim, evidence, and the debate summary. Provide your revised
             HumanMessage(content=user_prompt),
         ]
 
-        llm = get_llm("debater", model_name=model_override, temperature=config.debater_temperature)
+        models_list = state.get("debater_models") or getattr(config, "debater_models", [])
+        chosen_model = model_override or (models_list[debater_id] if debater_id < len(models_list) else getattr(config, "debater_model", "claude-haiku-4-5-20251001"))
+        llm = get_llm("debater", model_name=chosen_model, temperature=config.debater_temperature)
 
         sample_vectors: List[List[float]] = []
         sample_positions: List[str] = []
@@ -166,11 +168,12 @@ Re-reason from the claim, evidence, and the debate summary. Provide your revised
             reasoning=combined_reasoning,
             acknowledged_weaknesses=[],
             confidence=float(round(avg_vec[winning_idx], 4)),
+            model_name=chosen_model,
         )
 
         log_msg = format_audit_log(
             agent_name,
-            f"Round {current_round}: P(Supp)={bv.supported:.2f}, P(Ref)={bv.refuted:.2f}, P(Unk)={bv.unknown:.2f} (sampled {len(sample_vectors)}x) | Cited: {combined_cited}"
+            f"Round {current_round} [{chosen_model}]: P(Supp)={bv.supported:.2f}, P(Ref)={bv.refuted:.2f}, P(Unk)={bv.unknown:.2f} (sampled {len(sample_vectors)}x) | Cited: {combined_cited}"
         )
 
         return {

@@ -586,22 +586,44 @@ def get_llm(
     model_name: Optional[str] = None,
     temperature: float = 0.0,
     seed: Optional[int] = None,
+    provider_override: Optional[str] = None,
 ) -> Any:
     """
     Factory returning an LLM instance conforming to LangChain's Runnable interface.
-    Dynamically switches between Anthropic, OpenAI, and Mock LLM based on configuration.
+    Dynamically switches between Anthropic, OpenAI, Groq, Ollama, and Mock LLM based on configuration.
+    Supports heterogeneous multi-model agent assignment via provider_override or 'provider/model' syntax.
     Wraps the instance with CachedLLMWrapper for transparent caching and cost telemetry.
     """
-    provider = config.llm_provider.lower()
+    provider = (provider_override or config.llm_provider).lower()
+    chosen_model = model_name
+
+    # Support 'provider/model' syntax when prefix is an explicit provider keyword
+    # Note: Preserve model IDs like 'openai/gpt-oss-120b' or 'qwen/qwen3.8-27b' on Groq
+    KNOWN_PROVIDERS = {"anthropic", "openai", "groq", "ollama", "mock"}
+    if model_name and "/" in model_name:
+        parts = model_name.split("/", 1)
+        prefix = parts[0].lower()
+        if prefix in KNOWN_PROVIDERS and not (prefix == "openai" and "gpt-oss" in parts[1].lower()):
+            provider = prefix
+            chosen_model = parts[1]
+
+    # Model name aliases & smart provider detection
+    if chosen_model:
+        lower_m = chosen_model.lower()
+        if lower_m in ["mistral", "mixtral"]:
+            chosen_model = "openai/gpt-oss-20b"
+        elif lower_m.startswith("gpt-4") and config.openai_api_key:
+            provider = "openai"
+        elif lower_m.startswith("claude-") and config.anthropic_api_key:
+            provider = "anthropic"
 
     raw_llm = None
-    chosen_model = model_name
 
     # 1. Anthropic Provider
     if provider == "anthropic" and config.anthropic_api_key:
         try:
             from langchain_anthropic import ChatAnthropic
-            chosen_model = model_name or getattr(config, f"{agent_name}_model", "claude-haiku-4-5-20251001")
+            chosen_model = chosen_model or getattr(config, f"{agent_name}_model", "claude-haiku-4-5-20251001")
             raw_llm = ChatAnthropic(
                 model=chosen_model,
                 api_key=config.anthropic_api_key,
@@ -614,7 +636,7 @@ def get_llm(
     if raw_llm is None and provider == "openai" and config.openai_api_key:
         try:
             from langchain_openai import ChatOpenAI
-            chosen_model = model_name or "gpt-4o-mini"
+            chosen_model = chosen_model or "gpt-4o-mini"
             raw_llm = ChatOpenAI(
                 model=chosen_model,
                 api_key=config.openai_api_key,
@@ -623,9 +645,48 @@ def get_llm(
         except Exception:
             pass
 
-    # 3. Default / Offline Mock Provider
+    # 3. Groq Provider (100% Free Tier via console.groq.com)
+    if raw_llm is None and provider == "groq" and config.groq_api_key:
+        try:
+            from langchain_openai import ChatOpenAI
+            # Map legacy/unavailable Groq model names to active Groq endpoints
+            groq_model_map = {
+                "llama-3.3-70b-versatile": "openai/gpt-oss-120b",
+                "llama-3.1-8b-instant": "qwen/qwen3.8-27b",
+                "mixtral-8x7b-32768": "openai/gpt-oss-20b",
+                "claude-haiku-4-5-20251001": "openai/gpt-oss-20b",
+                "claude-sonnet-4-6": "openai/gpt-oss-120b",
+            }
+            if chosen_model in groq_model_map:
+                chosen_model = groq_model_map[chosen_model]
+            elif not chosen_model or chosen_model.startswith("claude-") or chosen_model == "veritas-mock-engine":
+                chosen_model = "openai/gpt-oss-120b"
+
+            raw_llm = ChatOpenAI(
+                model=chosen_model,
+                api_key=config.groq_api_key,
+                base_url="https://api.groq.com/openai/v1",
+                temperature=temperature,
+            )
+        except Exception:
+            pass
+
+    # 4. Ollama Provider (100% Free Local - 0 API Keys)
+    if raw_llm is None and provider == "ollama":
+        try:
+            from langchain_community.chat_models import ChatOllama
+            if not chosen_model or chosen_model.startswith("claude-") or chosen_model.startswith("gpt-") or chosen_model == "veritas-mock-engine":
+                chosen_model = "llama3.2"
+            raw_llm = ChatOllama(
+                model=chosen_model,
+                temperature=temperature,
+            )
+        except Exception:
+            pass
+
+    # 5. Default / Offline Mock Provider
     if raw_llm is None:
-        chosen_model = model_name or "veritas-mock-engine"
+        chosen_model = chosen_model or "veritas-mock-engine"
         raw_llm = MockLLM(model_name=chosen_model, temperature=temperature)
 
     return CachedLLMWrapper(

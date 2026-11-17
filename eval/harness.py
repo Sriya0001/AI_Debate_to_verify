@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import re
@@ -429,7 +430,6 @@ class EvaluationHarness:
         all_conditions = conditions or [
             "cot",
             "sc",
-            "veritas",
             "fcmad",
             "fcmad_no_judge",
             "fcmad_no_degroot",
@@ -510,7 +510,13 @@ class EvaluationHarness:
         with open(md_out_path, "w", encoding="utf-8") as f:
             f.write(table_md)
 
-        print("\n" + table_md + "\n")
+        try:
+            print("\n" + table_md + "\n")
+        except UnicodeEncodeError:
+            # Fallback for Windows consoles using non-UTF-8 codepages
+            safe_text = table_md.encode(sys.stdout.encoding or "utf-8", errors="replace").decode(sys.stdout.encoding or "utf-8")
+            print("\n" + safe_text + "\n")
+
         print(f"Results saved to: {json_out_path}")
         print(f"Markdown table saved to: {md_out_path}")
 
@@ -547,11 +553,10 @@ class EvaluationHarness:
         cond_labels = {
             "cot": "1. Single-Agent CoT",
             "sc": "2. Self-Consistency (Call-Matched)",
-            "veritas": "3. VERITAS Mode (10 Agents)",
-            "fcmad": "4. FC-MAD (Proposed)",
-            "fcmad_no_judge": "   └ Ablation: Equal Weights (No Judge)",
-            "fcmad_no_degroot": "   └ Ablation: No DeGroot (alpha=1.0)",
-            "fcmad_no_summarizer": "   └ Ablation: No Summarizer",
+            "fcmad": "3. FC-MAD (Proposed Architecture)",
+            "fcmad_no_judge": "   |- Ablation: Equal Weights (No Judge)",
+            "fcmad_no_degroot": "   |- Ablation: No DeGroot (alpha=1.0)",
+            "fcmad_no_summarizer": "   |- Ablation: No Summarizer",
         }
 
         for cond, stats in summaries.items():

@@ -78,6 +78,7 @@ class VeritasState(TypedDict):
     fcmad_debate_summary: Optional[str]
     fcmad_quality_scores: Dict[str, float]
     provided_evidence: Optional[List[EvidenceItem]]
+    debater_models: Optional[List[str]]
     ablation: Optional[str]
     fcmad_equal_weights: bool
     fcmad_no_degroot: bool
@@ -95,11 +96,12 @@ class VeritasState(TypedDict):
 def initial_veritas_state(
     input_text: str,
     source_label: Optional[str] = None,
-    pipeline_mode: str = "veritas",
-    max_rounds: int = 3,
+    pipeline_mode: str = "fcmad",
+    max_rounds: int = 4,
     max_research_rounds: int = 2,
     provided_evidence: Optional[List[Any]] = None,
     ablation: Optional[str] = None,
+    debater_models: Optional[List[str]] = None,
 ) -> VeritasState:
     """
     Constructs a pristine starting state for a VERITAS verification session.
@@ -167,6 +169,7 @@ def initial_veritas_state(
         fcmad_debate_summary=None,
         fcmad_quality_scores={},
         provided_evidence=evidence_items if evidence_items else None,
+        debater_models=debater_models or list(getattr(config, "debater_models", [])),
         ablation=ablation,
         fcmad_equal_weights=equal_w,
         fcmad_no_degroot=no_degroot,

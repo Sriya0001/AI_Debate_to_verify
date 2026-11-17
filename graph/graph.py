@@ -67,27 +67,20 @@ def debate_turn_increment_node(state: VeritasState) -> Dict[str, Any]:
 
 def build_veritas_graph() -> StateGraph:
     """
-    Builds and compiles the full VERITAS Autonomous Multi-Agent verification graph.
+    Builds and compiles the unified FC-MAD Autonomous Multi-Agent verification graph
+    (Mathematical DeGroot Consensus with Total Variation Distance).
     """
     builder = StateGraph(VeritasState)
 
-    # ── Add All 10 Agent Nodes + Graph Support Nodes ─────────────────────────
+    # ── Core Pipeline Nodes ───────────────────────────────────────────────────
     builder.add_node("claim_analyzer", claim_analyzer_node)
     builder.add_node("planner", planner_node)
     builder.add_node("evidence_retriever", evidence_retriever_node)
     builder.add_node("source_credibility", source_credibility_node)
-    builder.add_node("advocate", advocate_node)
-    builder.add_node("skeptic", skeptic_node)
-    builder.add_node("neutral", neutral_analyst_node)
-    builder.add_node("critic", socratic_critic_node)
-    builder.add_node("judge", judge_node)
-    builder.add_node("degroot_consensus", degroot_consensus_node)
-    builder.add_node("autonomous_research", autonomous_research_node)
-    builder.add_node("final_verifier", final_verifier_node)
     builder.add_node("check_pending", check_pending_node)
     builder.add_node("reporter", reporter_node)
 
-    # ── Add FC-MAD Nodes ────────────────────────────────────────────────────
+    # ── FC-MAD Multi-Agent Deliberation & DeGroot TV-Consensus Nodes ─────────
     builder.add_node("fcmad_debaters_round0", fcmad_debaters_round0_node)
     builder.add_node("fcmad_judge", fcmad_judge_node)
     builder.add_node("fcmad_summarizer", fcmad_summarizer_node)
@@ -96,64 +89,20 @@ def build_veritas_graph() -> StateGraph:
     builder.add_node("fcmad_pool", fcmad_pool_node)
     builder.add_node("fcmad_output", fcmad_output_node)
 
-    # ── Define Deterministic Edges ──────────────────────────────────────────
+    # ── Edge Wiring ─────────────────────────────────────────────────────────
     # 1. Start -> Claim Analyzer -> Planner -> Evidence Retrieval -> Source Credibility
     builder.add_edge(START, "claim_analyzer")
     builder.add_edge("claim_analyzer", "planner")
     builder.add_edge("planner", "evidence_retriever")
     builder.add_edge("evidence_retriever", "source_credibility")
 
-    # 2. Source Credibility branches based on pipeline_mode ("fcmad" vs "veritas")
-    builder.add_conditional_edges(
-        "source_credibility",
-        route_pipeline_mode,
-        {
-            "advocate": "advocate",
-            "skeptic": "skeptic",
-            "neutral": "neutral",
-            "fcmad_debaters_round0": "fcmad_debaters_round0",
-        }
-    )
+    # 2. Source Credibility flows directly into FC-MAD Parallel Debaters Round 0
+    builder.add_edge("source_credibility", "fcmad_debaters_round0")
 
-    # ── VERITAS Pipeline Edges ──────────────────────────────────────────────
-    # Advocate, Skeptic, and Neutral fan-in to Socratic Critic
-    builder.add_edge(["advocate", "skeptic", "neutral"], "critic")
-
-    # Critic -> Judge -> DeGroot Consensus
-    builder.add_edge("critic", "judge")
-    builder.add_edge("judge", "degroot_consensus")
-
-    # After DeGroot Consensus: Autonomous Router decides next action
-    builder.add_conditional_edges(
-        "degroot_consensus",
-        route_after_consensus,
-        {
-            "autonomous_research": "autonomous_research",
-            "advocate": "advocate",
-            "skeptic": "skeptic",
-            "neutral": "neutral",
-            "final_verifier": "final_verifier",
-        }
-    )
-
-    # Autonomous Research loops back to Evidence Retrieval
-    builder.add_edge("autonomous_research", "evidence_retriever")
-
-    # After Final Verifier: check if more claims remain
-    builder.add_conditional_edges(
-        "final_verifier",
-        route_after_verifier,
-        {
-            "check_pending": "check_pending",
-            "reporter": "reporter",
-        }
-    )
-
-    # ── FC-MAD Pipeline Edges (docs/FCMAD_MATH.md) ──────────────────────────
-    # Round 0 debaters in parallel -> judge
+    # 3. Round 0 Debaters -> FC-MAD Judge (argument quality q_i & peer credibility c_i)
     builder.add_edge("fcmad_debaters_round0", "fcmad_judge")
 
-    # judge -> stop check router (stops ONLY on epsilon rule or max rounds)
+    # 4. FC-MAD Stop Router: stops on epsilon consensus (E <= epsilon) or max rounds (t = M)
     builder.add_conditional_edges(
         "fcmad_judge",
         route_fcmad_stop,
@@ -163,19 +112,15 @@ def build_veritas_graph() -> StateGraph:
         }
     )
 
-    # summarizer -> debaters revise
+    # 5. Iteration loop: Summarizer -> Debaters Revise -> DeGroot TV Update -> Judge
     builder.add_edge("fcmad_summarizer", "fcmad_debaters_revise")
-
-    # debaters revise -> DeGroot update (increments round counter in exactly one place)
     builder.add_edge("fcmad_debaters_revise", "fcmad_degroot")
-
-    # DeGroot update loops back to judge for re-evaluation and stop check
     builder.add_edge("fcmad_degroot", "fcmad_judge")
 
-    # pool -> output agent
+    # 6. Final Pooling (p* = sum c_i * p_i), calibration, and abstention check -> Output Agent
     builder.add_edge("fcmad_pool", "fcmad_output")
 
-    # output agent -> check pending or reporter
+    # 7. Output Agent -> Check Pending claims or Reporter
     builder.add_conditional_edges(
         "fcmad_output",
         route_after_verifier,
@@ -201,5 +146,6 @@ def build_veritas_graph() -> StateGraph:
     return builder.compile()
 
 
-# Module-level compiled graph
+# Module-level compiled graph (Unified FC-MAD DeGroot consensus architecture)
 veritas_graph = build_veritas_graph()
+fcmad_graph = veritas_graph

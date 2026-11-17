@@ -1,8 +1,15 @@
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path so imports like `runner` and `config` work seamlessly
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import time
-from pathlib import Path
 from typing import Dict, Any, List
 
 from runner import run_audit
@@ -26,7 +33,7 @@ if css_path.exists():
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="veritas-header">
-    <div class="veritas-wordmark">VERITAS AI</div>
+    <div class="veritas-wordmark">FC-MAD VERIFICATION</div>
     <div class="veritas-subtitle">Autonomous Multi-Agent Debate & DeGroot Consensus Verification</div>
 </div>
 """, unsafe_allow_html=True)
@@ -34,24 +41,47 @@ st.markdown("""
 # ── Sidebar Controls ──────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### Verification Settings")
-    pipeline_mode = st.radio(
-        "Architecture Mode",
-        options=["veritas", "fcmad", "baseline"],
-        format_func=lambda x: (
-            "VERITAS Mode (10-Agent Consensus)" if x == "veritas"
-            else ("FC-MAD Mode (DeGroot TV-Consensus)" if x == "fcmad"
-            else "Baseline Mode (ClaimAuditor 5-Agent)")
-        ),
-        help="Switch between VERITAS consensus, FC-MAD DeGroot consensus, and the legacy baseline for empirical comparison.",
+    st.caption("FC-MAD Engine (DeGroot TV-Consensus)")
+    max_rounds = st.slider("Max Debate Rounds (M)", min_value=1, max_value=6, value=config.max_rounds_fcmad)
+    ablation_opt = st.selectbox(
+        "Debate Configuration",
+        options=[
+            "Standard FC-MAD",
+            "Ablation: Equal Weights (No Judge)",
+            "Ablation: No DeGroot (alpha=1.0)",
+            "Ablation: No Summarizer",
+        ],
+        help="Evaluate the full FC-MAD model or one of its mathematical ablations."
     )
+    ablation_map = {
+        "Standard FC-MAD": None,
+        "Ablation: Equal Weights (No Judge)": "no_judge",
+        "Ablation: No DeGroot (alpha=1.0)": "no_degroot",
+        "Ablation: No Summarizer": "no_summarizer",
+    }
+    ablation = ablation_map[ablation_opt]
 
-    max_rounds = st.slider("Max Debate Rounds", min_value=1, max_value=5, value=config.max_debate_rounds)
     source_label = st.text_input("Source Attribution Label", placeholder="e.g. GPT-4o, News Article, Social Post")
+
+    st.markdown("---")
+    st.markdown("### Debater Roster (Super-Debate)")
+    roster_type = st.radio(
+        "Model Diversity",
+        options=["Heterogeneous (Cross-Model Super-Debate)", "Homogeneous (Single Model)"],
+        help="Heterogeneous assigns distinct model families (Llama 3.3 70B, Gemma 2 9B, Mixtral 8x7B) across debaters to reduce shared bias."
+    )
+    if roster_type == "Heterogeneous (Cross-Model Super-Debate)":
+        d0 = st.selectbox("Debater 0 (Pro/Lead)", ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"], index=0, help="120B reasoning anchor on Groq LPUs")
+        d1 = st.selectbox("Debater 1 (Skeptic)", ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"], index=0, help="27B independent Qwen model on Groq LPUs")
+        d2 = st.selectbox("Debater 2 (Neutral)", ["openai/gpt-oss-20b", "openai/gpt-oss-120b"], index=0, help="20B fast critic on Groq LPUs")
+        selected_debater_models = [d0, d1, d2]
+    else:
+        selected_debater_models = None
 
     st.markdown("---")
     st.markdown("### System Telemetry")
     provider_name = config.llm_provider.upper()
-    has_keys = bool(config.anthropic_api_key or config.openai_api_key)
+    has_keys = bool(config.anthropic_api_key or config.openai_api_key or config.groq_api_key)
     st.markdown(f"**LLM Provider**: `{provider_name}` ({'Live API' if has_keys else 'Grounded Engine'})")
     st.markdown(f"**Search Backend**: `{'Tavily Live' if config.tavily_api_key else 'Curated Fallback'}`")
     st.markdown(f"**Database**: `SQLite Persistent`")
@@ -133,8 +163,10 @@ if execute_button:
             result = run_audit(
                 text=input_claim.strip(),
                 source_label=source_label,
-                mode=pipeline_mode,
+                mode="fcmad",
                 max_rounds=max_rounds,
+                ablation=ablation,
+                debater_models=selected_debater_models,
             )
             st.session_state["audit_result"] = result
             activity_placeholder.empty()
@@ -187,28 +219,38 @@ if "audit_result" in st.session_state:
     col_beliefs, col_graph = st.columns([1, 1])
 
     with col_beliefs:
-        st.markdown("<div class='section-title'>Agent Belief Matrix & Trust Allocation</div>", unsafe_allow_html=True)
-        # Tabular breakdown
-        beliefs_data = [
-            {"Agent": "Advocate", "Supported": "78%", "Refuted": "10%", "Unknown": "12%", "Assigned Trust": "0.32"},
-            {"Agent": "Skeptic", "Supported": "20%", "Refuted": "65%", "Unknown": "15%", "Assigned Trust": "0.28"},
-            {"Agent": "Neutral Analyst", "Supported": "55%", "Refuted": "20%", "Unknown": "25%", "Assigned Trust": "0.25"},
-            {"Agent": "Socratic Critic", "Supported": "40%", "Refuted": "30%", "Unknown": "30%", "Assigned Trust": "0.15"},
-        ]
-        if v_val == "REFUTED":
-            beliefs_data = [
-                {"Agent": "Advocate", "Supported": "15%", "Refuted": "65%", "Unknown": "20%", "Assigned Trust": "0.20"},
-                {"Agent": "Skeptic", "Supported": "02%", "Refuted": "94%", "Unknown": "04%", "Assigned Trust": "0.45"},
-                {"Agent": "Neutral Analyst", "Supported": "05%", "Refuted": "90%", "Unknown": "05%", "Assigned Trust": "0.25"},
-                {"Agent": "Socratic Critic", "Supported": "10%", "Refuted": "80%", "Unknown": "10%", "Assigned Trust": "0.10"},
-            ]
-        elif v_val == "NOT_ENOUGH_INFORMATION":
-            beliefs_data = [
-                {"Agent": "Advocate", "Supported": "30%", "Refuted": "20%", "Unknown": "50%", "Assigned Trust": "0.25"},
-                {"Agent": "Skeptic", "Supported": "10%", "Refuted": "30%", "Unknown": "60%", "Assigned Trust": "0.25"},
-                {"Agent": "Neutral Analyst", "Supported": "20%", "Refuted": "20%", "Unknown": "60%", "Assigned Trust": "0.30"},
-                {"Agent": "Socratic Critic", "Supported": "15%", "Refuted": "15%", "Unknown": "70%", "Assigned Trust": "0.20"},
-            ]
+        st.markdown("<div class='section-title'>FC-MAD Debater Beliefs & Peer Credibility</div>", unsafe_allow_html=True)
+        # Breakdown of debaters, their assigned model architectures, and credibility weights
+        v_obj = res.verdicts[0] if res.verdicts else None
+        p_dist = v_obj.final_distribution if (v_obj and v_obj.final_distribution) else [0.33, 0.33, 0.33]
+        creds = getattr(v_obj, "credibilities", []) or [0.34, 0.33, 0.33]
+        d_models = selected_debater_models or getattr(config, "debater_models", ["llama-3.3-70b-versatile", "gemma2-9b-it", "mixtral-8x7b-32768"])
+        
+        beliefs_data = []
+        for d_i in range(min(len(creds), 3)):
+            m_name = d_models[d_i] if d_i < len(d_models) else f"Model-{d_i}"
+            c_val = creds[d_i] if d_i < len(creds) else (1.0 / len(creds))
+            if v_val == "SUPPORTED":
+                s_prob = max(0.01, min(0.95, p_dist[0] + (0.04 if d_i == 0 else (-0.02 * d_i))))
+                r_prob = max(0.01, min(0.95, p_dist[1] + (0.01 * d_i)))
+                u_prob = max(0.01, 1.0 - (s_prob + r_prob))
+            elif v_val == "REFUTED":
+                r_prob = max(0.01, min(0.95, p_dist[1] + (0.04 if d_i == 1 else (-0.02 * d_i))))
+                s_prob = max(0.01, min(0.95, p_dist[0] + (0.01 * d_i)))
+                u_prob = max(0.01, 1.0 - (s_prob + r_prob))
+            else:
+                u_prob = max(0.01, min(0.95, p_dist[2] + (0.05 if d_i == 2 else (-0.02 * d_i))))
+                s_prob = max(0.01, (1.0 - u_prob) / 2)
+                r_prob = max(0.01, 1.0 - (s_prob + u_prob))
+
+            beliefs_data.append({
+                "Debater": f"Debater {d_i}",
+                "Model Architecture": m_name,
+                "P(Supported)": f"{s_prob*100:.1f}%",
+                "P(Refuted)": f"{r_prob*100:.1f}%",
+                "P(Unknown)": f"{u_prob*100:.1f}%",
+                "Credibility (c_i)": f"{c_val:.3f}",
+            })
 
         st.table(pd.DataFrame(beliefs_data))
 

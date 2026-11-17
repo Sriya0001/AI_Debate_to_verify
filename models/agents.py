@@ -50,6 +50,7 @@ class AgentPosition(BaseModel):
     reasoning: str = Field(..., description="Detailed argumentative text")
     acknowledged_weaknesses: List[str] = Field(default_factory=list, description="Weaknesses disclosed by the agent")
     confidence: float = Field(..., ge=0.0, le=1.0)
+    model_name: Optional[str] = Field(None, description="Backbone LLM model used by this agent")
 
 
 class SocraticChallenge(BaseModel):

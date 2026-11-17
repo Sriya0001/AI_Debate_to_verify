@@ -121,10 +121,10 @@ def test_autonomous_routing_logic():
     assert route3 == "final_verifier"
 
 
-def test_full_veritas_audit_execution():
+def test_full_fcmad_audit_execution():
     result = run_audit(
         text="The Eiffel Tower is 330 meters tall and was built in 1889.",
-        mode="veritas",
+        mode="fcmad",
         max_rounds=2,
     )
     assert result.session_id is not None
@@ -139,7 +139,7 @@ def test_full_veritas_audit_execution():
 def test_not_enough_information_verdict():
     result = run_audit(
         text="Project Titan discovered sentient extraterrestrial signals in deep space in March 2026.",
-        mode="veritas",
+        mode="fcmad",
         max_rounds=2,
     )
     assert result.aggregate_verdict == VerdictType.NOT_ENOUGH_INFORMATION

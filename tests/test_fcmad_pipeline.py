@@ -171,3 +171,32 @@ def test_fcmad_output_agent_preserves_label_and_distribution():
     assert v.verdict.value == expected_label
     # Raw confidence must equal max probability in distribution
     assert abs(v.raw_confidence - float(dist[expected_winning_idx])) < 1e-4
+
+
+# ── FCMAD Integration Test 6: Heterogeneous Cross-Model Debater Assignment ─────
+
+def test_fcmad_heterogeneous_multi_model_debater_assignment():
+    """
+    Verifies that distinct models can be assigned across debater agents,
+    enabling heterogeneous cross-model deliberation.
+    """
+    custom_models = [
+        "llama-3.3-70b-versatile",
+        "gemma2-9b-it",
+        "mixtral-8x7b-32768",
+    ]
+    result = run_audit(
+        text="The Eiffel Tower is 330 meters tall including antennas and was completed in 1889.",
+        mode="fcmad",
+        max_rounds=2,
+        debater_models=custom_models,
+    )
+
+    assert result.session_id is not None
+    assert len(result.verdicts) >= 1
+    audit_text = " ".join(result.audit_trail)
+    
+    # Verify that the audit trail explicitly recorded the distinct model names
+    assert "llama-3.3-70b-versatile" in audit_text
+    assert "gemma2-9b-it" in audit_text
+    assert "mixtral-8x7b-32768" in audit_text
